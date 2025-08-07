@@ -102,13 +102,22 @@ export default function WebcamWithPose() {
     // Cancella eventuali speech in corso
     window.speechSynthesis.cancel()
     
-    // Parla
-    speechUtteranceRef.current.text = text
-    window.speechSynthesis.speak(speechUtteranceRef.current)
+    // Su mobile, potrebbe servire un piccolo delay
+    const speakWithDelay = () => {
+      speechUtteranceRef.current!.text = text
+      window.speechSynthesis.speak(speechUtteranceRef.current!)
+      
+      lastSpokenRef.current = text
+      lastSpeakTimeRef.current = now
+      setLastVoiceFeedback(text)
+    }
     
-    lastSpokenRef.current = text
-    lastSpeakTimeRef.current = now
-    setLastVoiceFeedback(text)
+    // Su mobile aggiungi un piccolo delay
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      setTimeout(speakWithDelay, 100)
+    } else {
+      speakWithDelay()
+    }
   }
 
   // Funzione per calcolare angolo tra 3 punti
@@ -404,6 +413,22 @@ export default function WebcamWithPose() {
   const handleStart = async () => {
     try {
       console.log('🎬 Avvio sessione con MediaPipe...')
+      
+      // Su mobile, inizializza audio con click utente
+      if (voiceEnabled && speechUtteranceRef.current) {
+        // Test silenzioso per attivare audio su mobile
+        speechUtteranceRef.current.text = ' '
+        speechUtteranceRef.current.volume = 0.01
+        window.speechSynthesis.speak(speechUtteranceRef.current)
+        
+        // Reset volume
+        setTimeout(() => {
+          if (speechUtteranceRef.current) {
+            speechUtteranceRef.current.volume = 0.9
+          }
+        }, 100)
+      }
+      
       await startCamera()
       setIsActive(true)
       setFrameCount(0)
@@ -414,7 +439,7 @@ export default function WebcamWithPose() {
       if (voiceEnabled) {
         setTimeout(() => {
           speak('Iniziamo l\'allenamento. Posizionati per lo squat', true)
-        }, 1000)
+        }, 1500)
       }
       
       if (poseRef.current && videoRef.current) {
@@ -638,6 +663,16 @@ export default function WebcamWithPose() {
           </button>
         )}
       </div>
+      
+      {/* Mobile Audio Warning */}
+      {typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <p className="text-xs text-yellow-800">
+            📱 <strong>Mobile:</strong> Assicurati che il telefono non sia in modalità silenziosa e il volume sia alto. 
+            Il feedback vocale si attiva al primo click su "Inizia Allenamento".
+          </p>
+        </div>
+      )}
 
       {/* Voice Feedback Display */}
       {voiceEnabled && lastVoiceFeedback && (
