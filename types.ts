@@ -1,30 +1,30 @@
 
+export type ExerciseName = 'squat' | 'bench-press' | 'deadlift';
+
 export type ExerciseFeedback = {
   timestamp: number;
   message: string;
-  color: 'red' | 'yellow' | 'green';
 };
 
 export type WorkoutSession = {
-  exercise: 'squat' | 'bench-press' | 'deadlift';
+  exercise: ExerciseName;
   reps: number;
   feedback: ExerciseFeedback[];
+};
+
+export type UserPreferences = {
+  preferredExercise: ExerciseName;
+  showSkeleton: boolean;
+};
+
+export type ExerciseStats = {
+  totalReps: number;
+  sessionsCompleted: number;
 };
 
 export type User = {
   id: string;
   name: string;
-  email: string;
-  joinedAt: Date;
-};
-
-export type UserPreferences = {
-  preferredUnit: 'kg' | 'lbs';
-  darkMode: boolean;
-};
-
-export type ExerciseStats = {
-  exercise: string;
-  maxWeight: number;
-  maxReps: number;
+  preferences: UserPreferences;
+  stats: Record<ExerciseName, ExerciseStats>;
 };
