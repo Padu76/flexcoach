@@ -1,4 +1,4 @@
-// components/WebcamWithPoseMobile.tsx - Versione con beep per mobile
+// components/WebcamWithPoseMobile.tsx - Versione FULL mobile responsive
 
 'use client'
 
@@ -10,7 +10,9 @@ import {
   StopIcon,
   CameraIcon,
   SpeakerWaveIcon,
-  SpeakerXMarkIcon
+  SpeakerXMarkIcon,
+  ChevronUpIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline'
 
 // Dichiarazione tipi MediaPipe
@@ -38,10 +40,13 @@ const POSE_LANDMARKS = {
 export default function WebcamWithPoseMobile() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const poseRef = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [isActive, setIsActive] = useState(false)
   const [isMediaPipeReady, setIsMediaPipeReady] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('Inizializzazione...')
   const [landmarkCount, setLandmarkCount] = useState(0)
+  const [showInfo, setShowInfo] = useState(false)
+  const [isLandscape, setIsLandscape] = useState(false)
   
   // Sound feedback
   const { initializeAudio, isInitialized: isAudioReady, isMuted, toggleMute, sounds } = useSoundFeedback()
@@ -68,6 +73,33 @@ export default function WebcamWithPoseMobile() {
   // Hook camera
   const { videoRef, isStreamActive, error: cameraError, startCamera, stopCamera } = useCamera()
 
+  // Detect orientamento
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      const landscape = window.innerWidth > window.innerHeight
+      setIsLandscape(landscape)
+      
+      // Ridimensiona canvas quando cambia orientamento
+      if (canvasRef.current && videoRef.current) {
+        setTimeout(() => {
+          if (canvasRef.current && videoRef.current) {
+            canvasRef.current.width = videoRef.current.videoWidth || window.innerWidth
+            canvasRef.current.height = videoRef.current.videoHeight || window.innerHeight * 0.6
+          }
+        }, 100)
+      }
+    }
+
+    handleOrientationChange()
+    window.addEventListener('resize', handleOrientationChange)
+    window.addEventListener('orientationchange', handleOrientationChange)
+    
+    return () => {
+      window.removeEventListener('resize', handleOrientationChange)
+      window.removeEventListener('orientationchange', handleOrientationChange)
+    }
+  }, [])
+
   // Funzione per calcolare angolo tra 3 punti
   const calculateAngle = (a: any, b: any, c: any): number => {
     const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x)
@@ -87,10 +119,8 @@ export default function WebcamWithPoseMobile() {
     const now = Date.now()
     const timeSinceLastSound = now - lastSoundTimeRef.current
     
-    // Evita spam di suoni (minimo 1 secondo tra feedback)
     if (timeSinceLastSound < 1000) return
     
-    // Feedback per profondità
     if (depth === 'alto' && avgKnee > 150 && timeSinceLastSound > 2000) {
       sounds.scendi()
       lastSoundTimeRef.current = now
@@ -110,7 +140,6 @@ export default function WebcamWithPoseMobile() {
       setRepCount(newCount)
       setIsInRep(false)
       
-      // Suono per ripetizione completata
       if (newCount === 5) {
         sounds.cinqueReps()
       } else if (newCount === 10) {
@@ -131,19 +160,16 @@ export default function WebcamWithPoseMobile() {
       try {
         setLoadingMessage('Caricamento MediaPipe...')
         
-        // Carica gli script necessari
         await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js')
         await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js')
         await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js')
         
-        // Inizializza Pose
         const pose = new window.Pose({
           locateFile: (file: string) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
           }
         })
         
-        // Configura opzioni
         await pose.setOptions({
           modelComplexity: 0,
           smoothLandmarks: true,
@@ -152,7 +178,6 @@ export default function WebcamWithPoseMobile() {
           minTrackingConfidence: 0.5
         })
         
-        // Callback risultati
         pose.onResults((results: any) => {
           if (!mounted || !canvasRef.current || !videoRef.current) return
           
@@ -160,19 +185,25 @@ export default function WebcamWithPoseMobile() {
           const ctx = canvas.getContext('2d')
           if (!ctx) return
           
-          // Aggiorna dimensioni canvas
-          canvas.width = videoRef.current.videoWidth || 640
-          canvas.height = videoRef.current.videoHeight || 480
+          // Dimensioni responsive del canvas
+          const videoWidth = videoRef.current.videoWidth
+          const videoHeight = videoRef.current.videoHeight
           
-          // Pulisci canvas
+          if (videoWidth && videoHeight) {
+            // Mantieni aspect ratio del video
+            const displayWidth = containerRef.current?.clientWidth || window.innerWidth
+            const displayHeight = (displayWidth * videoHeight) / videoWidth
+            
+            canvas.width = displayWidth
+            canvas.height = displayHeight
+          }
+          
           ctx.save()
           ctx.clearRect(0, 0, canvas.width, canvas.height)
           
-          // Se ci sono landmarks, disegnali e calcola angoli
           if (results.poseLandmarks) {
             setLandmarkCount(results.poseLandmarks.length)
             
-            // Calcola angoli per lo squat
             const landmarks = results.poseLandmarks
             
             const leftKneeAngle = calculateAngle(
@@ -211,7 +242,6 @@ export default function WebcamWithPoseMobile() {
               avgHip
             })
             
-            // Determina profondità squat
             let newDepth: 'alto' | 'parallelo' | 'profondo' = 'alto'
             if (avgKnee > 160) {
               newDepth = 'alto'
@@ -223,12 +253,10 @@ export default function WebcamWithPoseMobile() {
             
             setSquatDepth(newDepth)
             
-            // Gestisci feedback audio
             if (isActive) {
               handleSoundFeedback(newDepth, avgKnee)
             }
             
-            // Colore delle connessioni basato sulla forma
             let connectionColor = '#00FF00'
             if (avgKnee > 160) {
               connectionColor = '#FFFF00'
@@ -236,37 +264,37 @@ export default function WebcamWithPoseMobile() {
               connectionColor = '#FF0000'
             }
             
-            // Disegna connessioni
             window.drawConnectors(
               ctx, 
               results.poseLandmarks, 
               window.POSE_CONNECTIONS,
-              { color: connectionColor, lineWidth: 4 }
+              { color: connectionColor, lineWidth: isLandscape ? 4 : 3 }
             )
             
-            // Disegna landmarks
             window.drawLandmarks(
               ctx, 
               results.poseLandmarks,
               { 
                 color: '#FF0000', 
                 lineWidth: 2,
-                radius: 6,
+                radius: isLandscape ? 6 : 4,
                 fillColor: connectionColor
               }
             )
             
-            // Disegna contatore reps
+            // Counter reps responsive
             if (repCount > 0) {
-              ctx.font = 'bold 48px Arial'
+              const fontSize = isLandscape ? 48 : 36
+              ctx.font = `bold ${fontSize}px Arial`
               ctx.fillStyle = '#FFFF00'
               ctx.strokeStyle = '#000000'
               ctx.lineWidth = 3
               const text = `${repCount}`
               const textWidth = ctx.measureText(text).width
               const x = (ctx.canvas.width - textWidth) / 2
-              ctx.strokeText(text, x, 60)
-              ctx.fillText(text, x, 60)
+              const y = isLandscape ? 60 : 50
+              ctx.strokeText(text, x, y)
+              ctx.fillText(text, x, y)
             }
             
           } else {
@@ -303,7 +331,6 @@ export default function WebcamWithPoseMobile() {
     }
   }, [])
 
-  // Funzione helper per caricare script
   const loadScript = (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) {
@@ -320,10 +347,8 @@ export default function WebcamWithPoseMobile() {
     })
   }
 
-  // Avvia sessione
   const handleStart = async () => {
     try {
-      // Inizializza audio al primo click (necessario per mobile)
       if (!isAudioReady) {
         initializeAudio()
       }
@@ -333,7 +358,6 @@ export default function WebcamWithPoseMobile() {
       setRepCount(0)
       setIsInRep(false)
       
-      // Suono di inizio
       if (!isMuted) {
         setTimeout(() => sounds.start(), 500)
       }
@@ -346,9 +370,7 @@ export default function WebcamWithPoseMobile() {
     }
   }
 
-  // Ferma sessione
   const handleStop = () => {
-    // Suono di fine
     if (!isMuted) {
       sounds.stop()
     }
@@ -373,7 +395,6 @@ export default function WebcamWithPoseMobile() {
     }
   }
 
-  // Avvia detection loop
   const startDetection = () => {
     if (!poseRef.current || !videoRef.current) return
     
@@ -402,14 +423,12 @@ export default function WebcamWithPoseMobile() {
     detect()
   }
 
-  // Avvia detection quando tutto è pronto
   useEffect(() => {
     if (isActive && isStreamActive && poseRef.current && videoRef.current) {
       startDetection()
     }
   }, [isActive, isStreamActive])
 
-  // Colore basato su profondità
   const getDepthColor = () => {
     switch(squatDepth) {
       case 'profondo': return 'text-green-600 bg-green-100'
@@ -419,7 +438,6 @@ export default function WebcamWithPoseMobile() {
     }
   }
 
-  // Messaggio feedback
   const getFeedbackMessage = () => {
     if (angles.avgKnee > 160) return '📏 Scendi di più!'
     if (angles.avgKnee > 120) return '⬇️ Continua a scendere'
@@ -429,79 +447,82 @@ export default function WebcamWithPoseMobile() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Status Bar */}
-      <div className="bg-gray-900 text-white p-4 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-sm">
-              {loadingMessage}
-            </span>
-            {isActive && (
-              <>
-                <span className="text-sm">
-                  Reps: <span className="font-mono text-yellow-400 text-lg font-bold">{repCount}</span>
-                </span>
-                <span className="text-sm">
-                  Angolo: <span className="font-mono text-green-400">{angles.avgKnee}°</span>
-                </span>
-              </>
-            )}
-          </div>
-          <button
-            onClick={toggleMute}
-            className={`p-2 rounded ${isMuted ? 'bg-red-600' : 'bg-green-600'} transition-colors`}
-            title={isMuted ? 'Attiva suoni' : 'Disattiva suoni'}
-          >
-            {isMuted ? (
-              <SpeakerXMarkIcon className="w-5 h-5" />
-            ) : (
-              <SpeakerWaveIcon className="w-5 h-5" />
-            )}
-          </button>
+    <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-gray-900">
+      {/* Status Bar - Compatta su mobile */}
+      <div className="bg-gray-900 text-white px-3 py-2 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3 text-xs sm:text-sm">
+          <span className={isMediaPipeReady ? 'text-green-400' : 'text-yellow-400'}>
+            {loadingMessage.replace('MediaPipe ', '')}
+          </span>
+          {isActive && (
+            <>
+              <span className="font-mono text-yellow-400 text-base font-bold">
+                {repCount}
+              </span>
+              <span className="text-green-400">
+                {angles.avgKnee}°
+              </span>
+            </>
+          )}
         </div>
+        <button
+          onClick={toggleMute}
+          className={`p-1.5 rounded ${isMuted ? 'bg-red-600' : 'bg-green-600'}`}
+        >
+          {isMuted ? (
+            <SpeakerXMarkIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+          ) : (
+            <SpeakerWaveIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+          )}
+        </button>
       </div>
 
-      {/* Video Container */}
-      <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+      {/* Video Container - Responsive */}
+      <div 
+        ref={containerRef}
+        className="relative bg-black flex-grow overflow-hidden"
+      >
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover mirror"
+          className="absolute inset-0 w-full h-full object-contain mirror"
+          style={{ maxHeight: '100%', maxWidth: '100%' }}
         />
         
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full mirror pointer-events-none"
+          style={{ objectFit: 'contain' }}
         />
 
         {!isStreamActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="text-center text-white">
-              <CameraIcon className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-400">
+            <div className="text-center text-white p-4">
+              <CameraIcon className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-gray-400" />
+              <p className="text-sm sm:text-base text-gray-400">
                 Premi "Inizia" per attivare la camera
               </p>
             </div>
           </div>
         )}
 
+        {/* Overlay Elements */}
         {isActive && isStreamActive && (
           <>
-            {/* Counter Reps grande */}
+            {/* Counter Reps - Top Right */}
             {repCount > 0 && (
-              <div className="absolute top-4 right-4 bg-black/70 text-yellow-400 px-4 py-2 rounded-lg">
-                <div className="text-3xl font-bold">{repCount}</div>
+              <div className="absolute top-2 right-2 bg-black/70 text-yellow-400 px-3 py-1 rounded-lg">
+                <div className="text-2xl sm:text-3xl font-bold">{repCount}</div>
                 <div className="text-xs text-center">REPS</div>
               </div>
             )}
             
-            {/* Feedback profondità */}
+            {/* Feedback - Bottom */}
             {landmarkCount > 0 && (
-              <div className="absolute bottom-4 left-4 right-4">
-                <div className={`text-center font-bold text-xl px-4 py-2 rounded-lg ${getDepthColor()}`}>
+              <div className="absolute bottom-2 left-2 right-2">
+                <div className={`text-center font-bold text-sm sm:text-lg px-3 py-2 rounded-lg ${getDepthColor()}`}>
                   {getFeedbackMessage()}
                 </div>
               </div>
@@ -510,40 +531,64 @@ export default function WebcamWithPoseMobile() {
         )}
       </div>
 
-      {/* Controlli */}
-      <div className="flex justify-center space-x-4">
-        {!isActive ? (
-          <button
-            onClick={handleStart}
-            disabled={!isMediaPipeReady}
-            className="btn-primary btn-lg inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <PlayIcon className="w-5 h-5 mr-2" />
-            {isMediaPipeReady ? 'Inizia Allenamento' : 'Caricamento...'}
-          </button>
-        ) : (
-          <button
-            onClick={handleStop}
-            className="btn bg-red-600 hover:bg-red-700 text-white btn-lg inline-flex items-center"
-          >
-            <StopIcon className="w-5 h-5 mr-2" />
-            Ferma Allenamento
-          </button>
-        )}
-      </div>
-
-      {/* Sound Legend */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 mb-2">🔊 Feedback Audio</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm text-blue-700">
-          <div>🔈 Tono basso = Scendi di più</div>
-          <div>🎵 Melodia = Perfetto!</div>
-          <div>🔔 Doppio beep = Rep completata</div>
-          <div>🎶 Melodia lunga = 5/10 reps!</div>
+      {/* Controls - Fixed Bottom */}
+      <div className="bg-white p-3 shrink-0">
+        <div className="flex justify-center mb-2">
+          {!isActive ? (
+            <button
+              onClick={handleStart}
+              disabled={!isMediaPipeReady}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium text-sm sm:text-base disabled:opacity-50 disabled:bg-gray-400 flex items-center gap-2"
+            >
+              <PlayIcon className="w-5 h-5" />
+              {isMediaPipeReady ? 'Inizia Allenamento' : 'Caricamento...'}
+            </button>
+          ) : (
+            <button
+              onClick={handleStop}
+              className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium text-sm sm:text-base flex items-center gap-2"
+            >
+              <StopIcon className="w-5 h-5" />
+              Ferma Allenamento
+            </button>
+          )}
         </div>
-        <p className="text-xs text-blue-600 mt-2">
-          {isMuted ? '🔇 Audio disattivato' : '🔊 Audio attivo - Volume alto consigliato'}
-        </p>
+
+        {/* Collapsible Info - Mobile Only */}
+        <div className="sm:hidden">
+          <button
+            onClick={() => setShowInfo(!showInfo)}
+            className="w-full flex items-center justify-between p-2 text-xs text-gray-600"
+          >
+            <span>🔊 Feedback Audio</span>
+            {showInfo ? (
+              <ChevronDownIcon className="w-4 h-4" />
+            ) : (
+              <ChevronUpIcon className="w-4 h-4" />
+            )}
+          </button>
+          
+          {showInfo && (
+            <div className="bg-blue-50 rounded-lg p-2 text-xs space-y-1">
+              <div>🔈 Tono basso = Scendi di più</div>
+              <div>🎵 Melodia = Perfetto!</div>
+              <div>🔔 Doppio beep = Rep completata</div>
+              <div className="text-blue-600 font-medium">
+                {isMuted ? '🔇 Audio OFF' : '🔊 Audio ON'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Info */}
+        <div className="hidden sm:block bg-blue-50 rounded-lg p-3 mt-2">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>🔈 Tono basso = Scendi</div>
+            <div>🎵 Melodia = Perfetto!</div>
+            <div>🔔 Doppio beep = Rep</div>
+            <div>🎶 Melodia lunga = 5/10 reps</div>
+          </div>
+        </div>
       </div>
     </div>
   )
