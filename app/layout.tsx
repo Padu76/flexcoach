@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import Link from 'next/link'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -26,14 +25,6 @@ export const metadata: Metadata = {
     description: 'Ricevi feedback in tempo reale sulla forma del tuo allenamento con rilevamento posturale AI',
     url: 'https://flexcoach.vercel.app',
     siteName: 'FlexCoach',
-    images: [
-      {
-        url: '/og-image.jpg',
-        width: 1200,
-        height: 630,
-        alt: 'FlexCoach - AI Fitness Trainer',
-      },
-    ],
     locale: 'it_IT',
     type: 'website',
   },
@@ -41,7 +32,6 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'FlexCoach - AI-Powered Fitness Trainer',
     description: 'Ricevi feedback in tempo reale sulla forma del tuo allenamento con rilevamento posturale AI',
-    images: ['/twitter-image.jpg'],
   },
   robots: {
     index: true,
@@ -53,9 +43,6 @@ export const metadata: Metadata = {
       'max-image-preview': 'large',
       'max-snippet': -1,
     },
-  },
-  verification: {
-    google: 'your-google-verification-code',
   },
 }
 
@@ -70,19 +57,6 @@ export default function RootLayout({
         {/* Preconnect to external domains for performance */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-        <link rel="preconnect" href="https://storage.googleapis.com" />
-        
-        {/* DNS prefetch for MediaPipe */}
-        <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
-        <link rel="dns-prefetch" href="//storage.googleapis.com" />
-        
-        {/* Favicon */}
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="manifest" href="/site.webmanifest" />
         
         {/* Theme color */}
         <meta name="theme-color" content="#2563eb" />
@@ -102,47 +76,28 @@ export default function RootLayout({
         
         {/* Main application */}
         <div className="min-h-screen flex flex-col">
-          {/* Header con navigation funzionante */}
+          {/* Header semplificato senza navigation */}
           <header className="bg-white shadow-sm border-b border-gray-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex justify-between items-center h-16">
                 <div className="flex items-center">
-                  <Link href="/" className="text-2xl font-bold text-primary-600 hover:text-primary-700 transition-colors">
+                  <span className="text-2xl font-bold text-primary-600">
                     FlexCoach
-                  </Link>
+                  </span>
                 </div>
-                <nav className="hidden md:flex space-x-8">
-                  <Link 
-                    href="/exercises" 
-                    className="text-gray-600 hover:text-primary-600 transition-colors font-medium"
-                  >
-                    Esercizi
-                  </Link>
-                  <Link 
-                    href="/dashboard" 
-                    className="text-gray-600 hover:text-primary-600 transition-colors font-medium"
-                  >
-                    Dashboard
-                  </Link>
-                  <Link 
-                    href="/profilo" 
-                    className="text-gray-600 hover:text-primary-600 transition-colors font-medium"
-                  >
-                    Profilo
-                  </Link>
+                
+                {/* Placeholder per menu futuro */}
+                <nav className="hidden md:flex items-center space-x-4">
+                  <span className="text-sm text-gray-500">
+                    Menu presto disponibile
+                  </span>
                 </nav>
                 
-                {/* Mobile menu button */}
+                {/* Mobile menu placeholder */}
                 <div className="md:hidden">
-                  <button
-                    type="button"
-                    className="text-gray-600 hover:text-primary-600 focus:outline-none focus:text-primary-600"
-                    aria-label="Menu mobile"
-                  >
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                  </button>
+                  <span className="text-sm text-gray-500">
+                    🚧
+                  </span>
                 </div>
               </div>
             </div>
@@ -162,6 +117,9 @@ export default function RootLayout({
                 </p>
                 <p className="text-sm text-gray-500 mt-2">
                   Allenamento fitness AI con correzione della forma in tempo reale
+                </p>
+                <p className="text-xs text-yellow-400 mt-4">
+                  🚧 Sito in costruzione - Funzionalità in arrivo presto!
                 </p>
               </div>
             </div>
