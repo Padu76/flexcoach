@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { 
   PlayCircleIcon, 
   CameraIcon, 
@@ -26,24 +27,21 @@ export default function HomePage() {
               FlexCoach usa il rilevamento posturale avanzato per aiutarti ad allenarti in sicurezza ed efficacia.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button 
-                className="btn-primary btn-lg hover-lift inline-flex items-center gap-2 cursor-not-allowed opacity-75"
-                disabled
+              <Link 
+                href="/exercises"
+                className="btn-primary btn-lg hover-lift inline-flex items-center gap-2"
               >
                 <PlayCircleIcon className="w-5 h-5" />
-                Presto Disponibile
-              </button>
-              <button 
-                className="btn bg-white/10 text-white border border-white/20 hover:bg-white/20 btn-lg inline-flex items-center gap-2 cursor-not-allowed opacity-75"
-                disabled
+                Inizia l'Allenamento
+              </Link>
+              <Link 
+                href="/exercises/squat"
+                className="btn bg-white/10 text-white border border-white/20 hover:bg-white/20 btn-lg inline-flex items-center gap-2"
               >
                 <CameraIcon className="w-5 h-5" />
-                Demo in Arrivo
-              </button>
+                Prova Subito
+              </Link>
             </div>
-            <p className="text-sm text-blue-200 mt-4">
-              🚧 App in costruzione - Torna presto per le novità!
-            </p>
           </div>
         </div>
       </section>
@@ -141,12 +139,12 @@ export default function HomePage() {
                   Perfeziona la profondità dello squat, il tracking delle ginocchia e la posizione della schiena. 
                   Ricevi avvisi per ginocchia in avanti e schiena curvata.
                 </p>
-                <button 
-                  className="btn-primary w-full group-hover:shadow-lg transition-shadow cursor-not-allowed opacity-75"
-                  disabled
+                <Link 
+                  href="/exercises/squat"
+                  className="btn-primary w-full group-hover:shadow-lg transition-shadow text-center"
                 >
-                  Presto Disponibile
-                </button>
+                  Pratica Squat
+                </Link>
               </div>
             </div>
 
@@ -241,20 +239,15 @@ export default function HomePage() {
           <p className="text-xl text-blue-100 mb-8">
             Unisciti a migliaia di atleti che si allenano in modo più intelligente e sicuro con FlexCoach
           </p>
-          <button 
-            className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg hover-lift inline-flex items-center gap-2 cursor-not-allowed opacity-75"
-            disabled
+          <Link 
+            href="/exercises"
+            className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg hover-lift inline-flex items-center gap-2"
           >
             <PlayCircleIcon className="w-5 h-5" />
-            Presto Disponibile
-          </button>
+            Inizia il Tuo Primo Allenamento
+          </Link>
         </div>
       </section>
-
-      {/* Coming Soon Notice */}
-      <div className="fixed bottom-4 left-4 bg-yellow-500 text-black px-4 py-2 rounded-lg shadow-lg">
-        <p className="text-sm font-semibold">🚧 App in sviluppo</p>
-      </div>
     </div>
   )
 }
