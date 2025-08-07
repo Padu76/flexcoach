@@ -1,4 +1,4 @@
-// components/ExerciseDetectorUniversal.tsx - Con Auto-Detect Vista
+// components/ExerciseDetectorUniversal.tsx - Con conteggio ripetizioni avanzato
 
 'use client'
 
@@ -15,7 +15,10 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   EyeIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline'
 
 declare global {
@@ -50,6 +53,17 @@ const POSE_LANDMARKS = {
 
 type ViewOrientation = 'lateral' | 'frontal' | 'unknown'
 
+interface RepData {
+  count: number
+  lastRepTime: number
+  currentRepDuration: number
+  avgRepDuration: number
+  bestDepth: number
+  currentDepth: number
+  isValidRep: boolean
+  repQuality: 'perfect' | 'good' | 'incomplete'
+}
+
 interface Props {
   exerciseType: ExerciseType
 }
@@ -71,10 +85,29 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   
   const { initializeAudio, isInitialized: isAudioReady, isMuted, toggleMute, sounds } = useSoundFeedback()
   
-  const [repCount, setRepCount] = useState(0)
+  // Conteggio ripetizioni avanzato
+  const [repData, setRepData] = useState<RepData>({
+    count: 0,
+    lastRepTime: 0,
+    currentRepDuration: 0,
+    avgRepDuration: 0,
+    bestDepth: 0,
+    currentDepth: 0,
+    isValidRep: false,
+    repQuality: 'good'
+  })
+  
+  const [repHistory, setRepHistory] = useState<number[]>([]) // Storia durata reps
   const [isInRep, setIsInRep] = useState(false)
+  const repStartTimeRef = useRef<number>(0)
   const previousPhaseRef = useRef<'start' | 'middle' | 'end'>('start')
   const lastSoundTimeRef = useRef<number>(0)
+  const minDepthReachedRef = useRef<number>(180) // Angolo minimo raggiunto nella rep
+  
+  // Timer sessione
+  const [sessionTime, setSessionTime] = useState(0)
+  const sessionStartRef = useRef<number>(0)
+  const sessionIntervalRef = useRef<NodeJS.Timeout>()
   
   const [angles, setAngles] = useState({
     primary: 0,
@@ -86,6 +119,34 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [formQuality, setFormQuality] = useState<'ottimo' | 'buono' | 'correggi'>('buono')
   
   const { videoRef, isStreamActive, error: cameraError, startCamera, stopCamera } = useCamera()
+
+  // Timer sessione
+  useEffect(() => {
+    if (isActive) {
+      sessionStartRef.current = Date.now()
+      sessionIntervalRef.current = setInterval(() => {
+        setSessionTime(Math.floor((Date.now() - sessionStartRef.current) / 1000))
+      }, 1000)
+    } else {
+      if (sessionIntervalRef.current) {
+        clearInterval(sessionIntervalRef.current)
+      }
+      setSessionTime(0)
+    }
+    
+    return () => {
+      if (sessionIntervalRef.current) {
+        clearInterval(sessionIntervalRef.current)
+      }
+    }
+  }, [isActive])
+
+  // Format time
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   // Detect orientamento schermo
   useEffect(() => {
@@ -115,49 +176,33 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
 
   // Funzione per rilevare l'orientamento del corpo
   const detectViewOrientation = (landmarks: any[]): ViewOrientation => {
-    // Calcola la distanza tra le spalle in X (larghezza)
     const shoulderWidth = Math.abs(
       landmarks[POSE_LANDMARKS.LEFT_SHOULDER].x - 
       landmarks[POSE_LANDMARKS.RIGHT_SHOULDER].x
     )
     
-    // Calcola la profondità delle spalle in Z
-    const shoulderDepth = Math.abs(
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER].z - 
-      landmarks[POSE_LANDMARKS.RIGHT_SHOULDER].z
-    )
-    
-    // Calcola visibility delle orecchie (laterale = una visibile, frontale = entrambe)
     const leftEarVis = landmarks[POSE_LANDMARKS.LEFT_EAR]?.visibility || 0
     const rightEarVis = landmarks[POSE_LANDMARKS.RIGHT_EAR]?.visibility || 0
     
-    // Calcola visibility dei fianchi
-    const leftHipVis = landmarks[POSE_LANDMARKS.LEFT_HIP]?.visibility || 0
-    const rightHipVis = landmarks[POSE_LANDMARKS.RIGHT_HIP]?.visibility || 0
-    
-    // Logica di detection
     if (shoulderWidth > 0.15) {
-      // Spalle larghe = vista frontale
       if (leftEarVis > 0.5 && rightEarVis > 0.5) {
         return 'frontal'
       }
     }
     
     if (shoulderWidth < 0.08) {
-      // Spalle strette = vista laterale
       if ((leftEarVis > 0.5 && rightEarVis < 0.3) || 
           (rightEarVis > 0.5 && leftEarVis < 0.3)) {
         return 'lateral'
       }
     }
     
-    // Backup check con i fianchi
     const hipWidth = Math.abs(
       landmarks[POSE_LANDMARKS.LEFT_HIP].x - 
       landmarks[POSE_LANDMARKS.RIGHT_HIP].x
     )
     
-    if (hipWidth > 0.12 && leftHipVis > 0.5 && rightHipVis > 0.5) {
+    if (hipWidth > 0.12) {
       return 'frontal'
     } else if (hipWidth < 0.06) {
       return 'lateral'
@@ -178,10 +223,195 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     return Math.round(angle)
   }
 
-  // Analisi SQUAT con auto-detect vista
+  // Validazione ripetizione
+  const validateRep = (minDepth: number): 'perfect' | 'good' | 'incomplete' => {
+    switch (exerciseType) {
+      case 'squat':
+        if (minDepth <= 90) return 'perfect'
+        if (minDepth <= 110) return 'good'
+        return 'incomplete'
+        
+      case 'bench-press':
+        if (minDepth <= 85) return 'perfect'
+        if (minDepth <= 100) return 'good'
+        return 'incomplete'
+        
+      case 'deadlift':
+        if (minDepth <= 100) return 'perfect'
+        if (minDepth <= 120) return 'good'
+        return 'incomplete'
+        
+      default:
+        return 'good'
+    }
+  }
+
+  // Gestione conteggio ripetizioni migliorato
+  const handleRepCounting = (phase: 'start' | 'middle' | 'end', primaryAngle: number) => {
+    // Aggiorna profondità minima raggiunta
+    if (primaryAngle < minDepthReachedRef.current) {
+      minDepthReachedRef.current = primaryAngle
+      setRepData(prev => ({
+        ...prev,
+        currentDepth: primaryAngle,
+        bestDepth: Math.min(prev.bestDepth || 180, primaryAngle)
+      }))
+    }
+    
+    // Inizio ripetizione (da start a middle/end)
+    if (previousPhaseRef.current === 'start' && phase !== 'start' && !isInRep) {
+      setIsInRep(true)
+      repStartTimeRef.current = Date.now()
+      minDepthReachedRef.current = 180
+      
+      // Sound feedback inizio rep
+      if (!isMuted && Date.now() - lastSoundTimeRef.current > 500) {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const oscillator = audioContext.createOscillator()
+        const gainNode = audioContext.createGain()
+        
+        oscillator.connect(gainNode)
+        gainNode.connect(audioContext.destination)
+        
+        oscillator.frequency.value = 440 // La
+        gainNode.gain.value = 0.1
+        oscillator.type = 'sine'
+        
+        oscillator.start()
+        oscillator.stop(audioContext.currentTime + 0.05)
+        
+        lastSoundTimeRef.current = Date.now()
+      }
+    }
+    
+    // Fine ripetizione (da end/middle a start)
+    if ((previousPhaseRef.current === 'end' || previousPhaseRef.current === 'middle') && 
+        phase === 'start' && isInRep) {
+      
+      const repDuration = (Date.now() - repStartTimeRef.current) / 1000
+      const repQuality = validateRep(minDepthReachedRef.current)
+      
+      // Conta solo se la rep è valida (durata minima e profondità sufficiente)
+      if (repDuration > 0.5 && repQuality !== 'incomplete') {
+        const newCount = repData.count + 1
+        const newHistory = [...repHistory, repDuration]
+        const avgDuration = newHistory.reduce((a, b) => a + b, 0) / newHistory.length
+        
+        setRepData(prev => ({
+          ...prev,
+          count: newCount,
+          lastRepTime: Date.now(),
+          currentRepDuration: repDuration,
+          avgRepDuration: avgDuration,
+          isValidRep: true,
+          repQuality: repQuality
+        }))
+        
+        setRepHistory(newHistory)
+        
+        // Sound feedback per rep completata
+        if (!isMuted) {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+          
+          if (repQuality === 'perfect') {
+            // Suono speciale per rep perfetta
+            playPerfectRepSound(audioContext)
+          } else {
+            // Suono normale
+            playNormalRepSound(audioContext, newCount)
+          }
+          
+          // Milestone sounds
+          if (newCount === 5) {
+            setTimeout(() => sounds.cinqueReps(), 300)
+          } else if (newCount === 10) {
+            setTimeout(() => sounds.dieciReps(), 300)
+          } else if (newCount % 10 === 0) {
+            // Ogni 10 reps
+            setTimeout(() => playMilestoneSound(audioContext), 300)
+          }
+        }
+      } else if (repQuality === 'incomplete') {
+        // Feedback per rep incompleta
+        setRepData(prev => ({
+          ...prev,
+          isValidRep: false,
+          repQuality: 'incomplete'
+        }))
+        
+        if (!isMuted) {
+          sounds.scendi() // Riusa il suono "scendi di più"
+        }
+      }
+      
+      setIsInRep(false)
+      minDepthReachedRef.current = 180
+    }
+    
+    previousPhaseRef.current = phase
+  }
+
+  // Suoni personalizzati per reps
+  const playNormalRepSound = (audioContext: AudioContext, count: number) => {
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    
+    // Frequenza aumenta con il numero di reps
+    oscillator.frequency.value = 523 + (count * 20) // Do5 + incremento
+    gainNode.gain.value = 0.2
+    oscillator.type = 'sine'
+    
+    oscillator.start()
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2)
+    oscillator.stop(audioContext.currentTime + 0.2)
+  }
+
+  const playPerfectRepSound = (audioContext: AudioContext) => {
+    // Accordo maggiore per rep perfetta
+    const frequencies = [523, 659, 784] // Do-Mi-Sol
+    
+    frequencies.forEach((freq, index) => {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.value = freq
+      gainNode.gain.value = 0.15
+      oscillator.type = 'sine'
+      
+      oscillator.start(audioContext.currentTime + index * 0.05)
+      oscillator.stop(audioContext.currentTime + 0.3)
+    })
+  }
+
+  const playMilestoneSound = (audioContext: AudioContext) => {
+    // Fanfara per milestone
+    const notes = [523, 587, 659, 784] // Do-Re-Mi-Sol
+    
+    notes.forEach((freq, index) => {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.value = freq
+      gainNode.gain.value = 0.2
+      oscillator.type = 'triangle'
+      
+      oscillator.start(audioContext.currentTime + index * 0.1)
+      oscillator.stop(audioContext.currentTime + 0.5)
+    })
+  }
+
+  // Analisi SQUAT con conteggio reps
   const analyzeSquat = (landmarks: any[], view: ViewOrientation) => {
     if (view === 'lateral') {
-      // Analisi laterale standard (profondità)
       const leftKneeAngle = calculateAngle(
         landmarks[POSE_LANDMARKS.LEFT_HIP],
         landmarks[POSE_LANDMARKS.LEFT_KNEE],
@@ -209,13 +439,15 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         tertiary: 0
       })
       
-      // Fase e qualità
       let phase: 'start' | 'middle' | 'end' = 'start'
       if (avgKnee > 160) phase = 'start'
       else if (avgKnee > 90) phase = 'middle'
       else phase = 'end'
       
       setExercisePhase(phase)
+      
+      // Gestione conteggio reps
+      handleRepCounting(phase, avgKnee)
       
       if (avgKnee > 70 && avgKnee < 110) {
         setFormQuality('ottimo')
@@ -229,31 +461,26 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       return { phase, avgKnee }
       
     } else if (view === 'frontal') {
-      // Analisi frontale (simmetria e allineamento ginocchia)
       const leftKneeX = landmarks[POSE_LANDMARKS.LEFT_KNEE].x
       const rightKneeX = landmarks[POSE_LANDMARKS.RIGHT_KNEE].x
       const leftAnkleX = landmarks[POSE_LANDMARKS.LEFT_ANKLE].x
       const rightAnkleX = landmarks[POSE_LANDMARKS.RIGHT_ANKLE].x
       
-      // Calcola allineamento ginocchia (valgismo/varismo)
       const leftAlignment = Math.abs(leftKneeX - leftAnkleX) * 100
       const rightAlignment = Math.abs(rightKneeX - rightAnkleX) * 100
       const avgAlignment = (leftAlignment + rightAlignment) / 2
       
-      // Calcola simmetria
       const symmetry = Math.abs(leftAlignment - rightAlignment)
       
-      // Stima profondità dal movimento verticale dei fianchi
       const hipY = (landmarks[POSE_LANDMARKS.LEFT_HIP].y + 
                    landmarks[POSE_LANDMARKS.RIGHT_HIP].y) / 2
       
       setAngles({
-        primary: Math.round(avgAlignment * 10), // Allineamento ginocchia
-        secondary: Math.round(symmetry * 10),    // Simmetria
-        tertiary: Math.round(hipY * 180)         // Stima profondità
+        primary: Math.round(avgAlignment * 10),
+        secondary: Math.round(symmetry * 10),
+        tertiary: Math.round(hipY * 180)
       })
       
-      // Fase basata su posizione verticale fianchi
       let phase: 'start' | 'middle' | 'end' = 'start'
       if (hipY < 0.5) phase = 'start'
       else if (hipY < 0.65) phase = 'middle'
@@ -261,7 +488,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       setExercisePhase(phase)
       
-      // Qualità basata su allineamento
+      // Gestione conteggio basata su movimento verticale
+      handleRepCounting(phase, hipY * 180)
+      
       if (avgAlignment < 5 && symmetry < 3) {
         setFormQuality('ottimo')
       } else if (avgAlignment < 10 && symmetry < 6) {
@@ -278,10 +507,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     return { phase: 'start', avgKnee: 0 }
   }
 
-  // Analisi PANCA con auto-detect vista
+  // Analisi PANCA con conteggio reps
   const analyzeBenchPress = (landmarks: any[], view: ViewOrientation) => {
     if (view === 'lateral') {
-      // Vista laterale standard
       const leftElbowAngle = calculateAngle(
         landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
         landmarks[POSE_LANDMARKS.LEFT_ELBOW],
@@ -315,6 +543,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       setExercisePhase(phase)
       
+      // Gestione conteggio reps
+      handleRepCounting(phase, avgElbow)
+      
       if (avgElbow > 70 && avgElbow < 100) {
         setFormQuality('ottimo')
       } else if (avgElbow > 60 && avgElbow < 110) {
@@ -327,19 +558,14 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       return { phase, avgElbow }
       
     } else if (view === 'frontal') {
-      // Vista frontale - ottima per simmetria
       const leftElbowY = landmarks[POSE_LANDMARKS.LEFT_ELBOW].y
       const rightElbowY = landmarks[POSE_LANDMARKS.RIGHT_ELBOW].y
       const leftWristY = landmarks[POSE_LANDMARKS.LEFT_WRIST].y
       const rightWristY = landmarks[POSE_LANDMARKS.RIGHT_WRIST].y
       
-      // Simmetria altezza gomiti
       const elbowSymmetry = Math.abs(leftElbowY - rightElbowY) * 100
-      
-      // Simmetria altezza polsi
       const wristSymmetry = Math.abs(leftWristY - rightWristY) * 100
       
-      // Larghezza presa
       const gripWidth = Math.abs(
         landmarks[POSE_LANDMARKS.LEFT_WRIST].x - 
         landmarks[POSE_LANDMARKS.RIGHT_WRIST].x
@@ -351,7 +577,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         tertiary: Math.round(gripWidth)
       })
       
-      // Stima fase dal movimento verticale
       const avgWristY = (leftWristY + rightWristY) / 2
       let phase: 'start' | 'middle' | 'end' = 'start'
       if (avgWristY < 0.4) phase = 'start'
@@ -360,7 +585,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       setExercisePhase(phase)
       
-      // Qualità basata su simmetria
+      handleRepCounting(phase, avgWristY * 200)
+      
       if (elbowSymmetry < 2 && wristSymmetry < 2) {
         setFormQuality('ottimo')
         setViewWarning('✅ Vista frontale: ottima per simmetria!')
@@ -379,10 +605,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     return { phase: 'start', avgElbow: 0 }
   }
 
-  // Analisi STACCO con auto-detect vista
+  // Analisi STACCO con conteggio reps
   const analyzeDeadlift = (landmarks: any[], view: ViewOrientation) => {
     if (view === 'lateral') {
-      // Vista laterale standard
       const hipAngle = calculateAngle(
         landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
         landmarks[POSE_LANDMARKS.LEFT_HIP],
@@ -414,6 +639,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       setExercisePhase(phase)
       
+      handleRepCounting(phase, hipAngle)
+      
       if (hipAngle > 80 && hipAngle < 170 && backAngle > 140) {
         setFormQuality('ottimo')
       } else if (hipAngle > 70 && hipAngle < 180 && backAngle > 130) {
@@ -426,16 +653,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       return { phase, avgAngle: hipAngle }
       
     } else if (view === 'frontal') {
-      // Vista frontale - controllo stance e simmetria
       const leftHipX = landmarks[POSE_LANDMARKS.LEFT_HIP].x
       const rightHipX = landmarks[POSE_LANDMARKS.RIGHT_HIP].x
       const leftAnkleX = landmarks[POSE_LANDMARKS.LEFT_ANKLE].x
       const rightAnkleX = landmarks[POSE_LANDMARKS.RIGHT_ANKLE].x
       
-      // Larghezza stance
       const stanceWidth = Math.abs(leftAnkleX - rightAnkleX) * 100
       
-      // Simmetria fianchi
       const hipSymmetry = Math.abs(
         landmarks[POSE_LANDMARKS.LEFT_HIP].y - 
         landmarks[POSE_LANDMARKS.RIGHT_HIP].y
@@ -447,7 +671,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         tertiary: 0
       })
       
-      // Stima fase
       const avgHipY = (landmarks[POSE_LANDMARKS.LEFT_HIP].y + 
                       landmarks[POSE_LANDMARKS.RIGHT_HIP].y) / 2
       let phase: 'start' | 'middle' | 'end' = 'start'
@@ -456,6 +679,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       else phase = 'end'
       
       setExercisePhase(phase)
+      
+      handleRepCounting(phase, avgHipY * 200)
       
       if (stanceWidth > 15 && stanceWidth < 40 && hipSymmetry < 3) {
         setFormQuality('ottimo')
@@ -471,42 +696,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     
     setViewWarning('❌ Posizionati di lato per sicurezza schiena')
     return { phase: 'start', avgAngle: 0 }
-  }
-
-  // Gestione feedback audio
-  const handleSoundFeedback = (phase: 'start' | 'middle' | 'end', quality: 'ottimo' | 'buono' | 'correggi') => {
-    if (isMuted) return
-    
-    const now = Date.now()
-    const timeSinceLastSound = now - lastSoundTimeRef.current
-    
-    if (timeSinceLastSound < 1000) return
-    
-    if (quality === 'correggi' && timeSinceLastSound > 2000) {
-      sounds.scendi()
-      lastSoundTimeRef.current = now
-    } else if (quality === 'ottimo' && phase === 'end' && timeSinceLastSound > 2000) {
-      sounds.perfetto()
-      lastSoundTimeRef.current = now
-    }
-    
-    if (previousPhaseRef.current === 'start' && phase === 'end') {
-      setIsInRep(true)
-    } else if (previousPhaseRef.current === 'end' && phase === 'start' && isInRep) {
-      const newCount = repCount + 1
-      setRepCount(newCount)
-      setIsInRep(false)
-      
-      if (newCount === 5) {
-        sounds.cinqueReps()
-      } else if (newCount === 10) {
-        sounds.dieciReps()
-      } else {
-        sounds.rep()
-      }
-    }
-    
-    previousPhaseRef.current = phase
   }
 
   // Carica MediaPipe
@@ -561,11 +750,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             
             const landmarks = results.poseLandmarks
             
-            // AUTO-DETECT VISTA
             const detectedView = detectViewOrientation(landmarks)
             setViewOrientation(detectedView)
             
-            // Analisi con vista rilevata
             let analysisResult: any = {}
             
             switch (exerciseType) {
@@ -580,20 +767,21 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
                 break
             }
             
-            if (isActive) {
-              handleSoundFeedback(exercisePhase, formQuality)
-            }
-            
             // Colore basato su qualità e vista
             let connectionColor = '#00FF00'
             if (detectedView === 'unknown') {
-              connectionColor = '#FF00FF' // Viola per vista non riconosciuta
+              connectionColor = '#FF00FF'
             } else if (formQuality === 'ottimo') {
               connectionColor = '#00FF00'
             } else if (formQuality === 'buono') {
               connectionColor = '#FFFF00'
             } else {
               connectionColor = '#FF0000'
+            }
+            
+            // Se in mezzo a una rep, colore speciale
+            if (isInRep) {
+              connectionColor = '#00FFFF' // Ciano durante la rep
             }
             
             window.drawConnectors(
@@ -614,7 +802,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               }
             )
             
-            // Indicatore vista nell'angolo
+            // Indicatore vista
             ctx.font = `bold ${isLandscape ? 20 : 16}px Arial`
             ctx.fillStyle = detectedView === 'unknown' ? '#FF00FF' : 
                            detectedView === 'lateral' ? '#00FF00' : '#00FFFF'
@@ -625,19 +813,67 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             ctx.strokeText(viewText, 10, 30)
             ctx.fillText(viewText, 10, 30)
             
-            // Counter reps
-            if (repCount > 0) {
-              const fontSize = isLandscape ? 48 : 36
+            // Counter reps grande
+            if (repData.count > 0) {
+              const fontSize = isLandscape ? 72 : 56
               ctx.font = `bold ${fontSize}px Arial`
-              ctx.fillStyle = '#FFFF00'
+              
+              // Colore basato su qualità ultima rep
+              let repColor = '#FFFF00'
+              if (repData.repQuality === 'perfect') {
+                repColor = '#00FF00'
+              } else if (repData.repQuality === 'incomplete') {
+                repColor = '#FF0000'
+              }
+              
+              ctx.fillStyle = repColor
               ctx.strokeStyle = '#000000'
-              ctx.lineWidth = 3
-              const text = `${repCount}`
+              ctx.lineWidth = 4
+              const text = `${repData.count}`
               const textWidth = ctx.measureText(text).width
               const x = (ctx.canvas.width - textWidth) / 2
-              const y = isLandscape ? 60 : 50
+              const y = isLandscape ? 80 : 60
               ctx.strokeText(text, x, y)
               ctx.fillText(text, x, y)
+              
+              // Qualità rep sotto il numero
+              if (repData.repQuality === 'perfect') {
+                ctx.font = `bold ${isLandscape ? 24 : 18}px Arial`
+                ctx.fillStyle = '#00FF00'
+                const qualityText = '⭐ PERFECT!'
+                const qualityWidth = ctx.measureText(qualityText).width
+                ctx.strokeText(qualityText, (ctx.canvas.width - qualityWidth) / 2, y + 30)
+                ctx.fillText(qualityText, (ctx.canvas.width - qualityWidth) / 2, y + 30)
+              }
+            }
+            
+            // Progress bar per profondità corrente
+            if (isInRep && repData.currentDepth < 180) {
+              const barWidth = 200
+              const barHeight = 20
+              const barX = (ctx.canvas.width - barWidth) / 2
+              const barY = ctx.canvas.height - 60
+              
+              // Background
+              ctx.fillStyle = 'rgba(0,0,0,0.5)'
+              ctx.fillRect(barX, barY, barWidth, barHeight)
+              
+              // Progress
+              const progress = Math.max(0, Math.min(1, (180 - repData.currentDepth) / 90))
+              const progressColor = progress > 0.5 ? '#00FF00' : 
+                                  progress > 0.3 ? '#FFFF00' : '#FF0000'
+              ctx.fillStyle = progressColor
+              ctx.fillRect(barX, barY, barWidth * progress, barHeight)
+              
+              // Border
+              ctx.strokeStyle = '#FFFFFF'
+              ctx.lineWidth = 2
+              ctx.strokeRect(barX, barY, barWidth, barHeight)
+              
+              // Text
+              ctx.font = 'bold 14px Arial'
+              ctx.fillStyle = '#FFFFFF'
+              ctx.fillText(`${repData.currentDepth}°`, barX + barWidth + 10, barY + 15)
             }
             
           } else {
@@ -698,10 +934,23 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       await startCamera()
       setIsActive(true)
-      setRepCount(0)
+      
+      // Reset tutto
+      setRepData({
+        count: 0,
+        lastRepTime: 0,
+        currentRepDuration: 0,
+        avgRepDuration: 0,
+        bestDepth: 0,
+        currentDepth: 0,
+        isValidRep: false,
+        repQuality: 'good'
+      })
+      setRepHistory([])
       setIsInRep(false)
       setViewOrientation('unknown')
       setViewWarning('')
+      minDepthReachedRef.current = 180
       
       if (!isMuted) {
         setTimeout(() => sounds.start(), 500)
@@ -716,8 +965,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }
 
   const handleStop = () => {
-    if (!isMuted) {
-      sounds.stop()
+    if (!isMuted && repData.count > 0) {
+      // Messaggio finale con numero reps
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      playMilestoneSound(audioContext)
     }
     
     setIsActive(false)
@@ -737,6 +988,22 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
       }
     }
+  }
+
+  const handleReset = () => {
+    setRepData({
+      count: 0,
+      lastRepTime: 0,
+      currentRepDuration: 0,
+      avgRepDuration: 0,
+      bestDepth: 0,
+      currentDepth: 0,
+      isValidRep: false,
+      repQuality: 'good'
+    })
+    setRepHistory([])
+    setIsInRep(false)
+    minDepthReachedRef.current = 180
   }
 
   const startDetection = () => {
@@ -783,9 +1050,12 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }
 
   const getFeedbackMessage = () => {
-    // Se vista non riconosciuta
     if (viewOrientation === 'unknown') {
       return '❓ Posizionati meglio per analisi'
+    }
+    
+    if (isInRep) {
+      return '💪 Continua così!'
     }
     
     switch (exerciseType) {
@@ -868,9 +1138,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
 
   const getViewLabel = () => {
     switch(viewOrientation) {
-      case 'lateral': return 'Vista Laterale'
-      case 'frontal': return 'Vista Frontale'
-      case 'unknown': return 'Vista Non Rilevata'
+      case 'lateral': return 'Laterale'
+      case 'frontal': return 'Frontale'
+      case 'unknown': return 'Non rilevata'
     }
   }
 
@@ -884,11 +1154,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           </span>
           {isActive && (
             <>
-              <span className="font-mono text-yellow-400 text-base font-bold">
-                {repCount}
-              </span>
-              <span className="text-green-400">
-                {getPrimaryAngleLabel()}: {angles.primary}°
+              <span className="text-yellow-400">
+                <ClockIcon className="w-4 h-4 inline mr-1" />
+                {formatTime(sessionTime)}
               </span>
               <span className={`px-2 py-0.5 rounded text-xs ${
                 viewOrientation === 'lateral' ? 'bg-green-600' :
@@ -900,16 +1168,27 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             </>
           )}
         </div>
-        <button
-          onClick={toggleMute}
-          className={`p-1.5 rounded ${isMuted ? 'bg-red-600' : 'bg-green-600'}`}
-        >
-          {isMuted ? (
-            <SpeakerXMarkIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-          ) : (
-            <SpeakerWaveIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+        <div className="flex gap-2">
+          {isActive && repData.count > 0 && (
+            <button
+              onClick={handleReset}
+              className="p-1.5 rounded bg-orange-600"
+              title="Reset conteggio"
+            >
+              <ArrowPathIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
           )}
-        </button>
+          <button
+            onClick={toggleMute}
+            className={`p-1.5 rounded ${isMuted ? 'bg-red-600' : 'bg-green-600'}`}
+          >
+            {isMuted ? (
+              <SpeakerXMarkIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            ) : (
+              <SpeakerWaveIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* View Warning Banner */}
@@ -961,12 +1240,50 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         {/* Overlay Elements */}
         {isActive && isStreamActive && (
           <>
-            {repCount > 0 && (
-              <div className="absolute top-2 right-2 bg-black/70 text-yellow-400 px-3 py-1 rounded-lg">
-                <div className="text-2xl sm:text-3xl font-bold">{repCount}</div>
-                <div className="text-xs text-center">REPS</div>
+            {/* Rep Counter Card */}
+            {repData.count > 0 && (
+              <div className="absolute top-2 right-2 bg-black/80 text-white p-3 rounded-lg min-w-[120px]">
+                <div className="text-4xl sm:text-5xl font-bold text-yellow-400 text-center">
+                  {repData.count}
+                </div>
+                <div className="text-xs text-center mt-1">RIPETIZIONI</div>
+                {repData.repQuality === 'perfect' && (
+                  <div className="text-xs text-green-400 text-center mt-1">
+                    ⭐ PERFETTA!
+                  </div>
+                )}
+                {repData.avgRepDuration > 0 && (
+                  <div className="text-xs text-gray-400 text-center mt-2">
+                    Media: {repData.avgRepDuration.toFixed(1)}s
+                  </div>
+                )}
+                {repData.bestDepth > 0 && repData.bestDepth < 180 && (
+                  <div className="text-xs text-blue-400 text-center">
+                    Best: {repData.bestDepth}°
+                  </div>
+                )}
               </div>
             )}
+            
+            {/* Stats Panel */}
+            <div className="absolute top-2 left-2 bg-black/70 text-white p-2 rounded-lg text-xs">
+              <div className="flex flex-col gap-1">
+                <div>
+                  {getPrimaryAngleLabel()}: <span className="font-bold text-yellow-400">{angles.primary}°</span>
+                </div>
+                {isInRep && (
+                  <div className="text-green-400">
+                    <CheckCircleIcon className="w-3 h-3 inline mr-1" />
+                    IN REP
+                  </div>
+                )}
+                {repData.currentDepth > 0 && repData.currentDepth < 180 && (
+                  <div>
+                    Profondità: <span className="font-bold">{repData.currentDepth}°</span>
+                  </div>
+                )}
+              </div>
+            </div>
             
             {landmarkCount > 0 && (
               <div className="absolute bottom-2 left-2 right-2">
@@ -1002,13 +1319,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           )}
         </div>
 
-        {/* Info Collapsible */}
+        {/* Info Collapsible Mobile */}
         <div className="sm:hidden">
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="w-full flex items-center justify-between p-2 text-xs text-gray-600"
           >
-            <span>🔊 Feedback & Info</span>
+            <span>📊 Statistiche Sessione</span>
             {showInfo ? (
               <ChevronDownIcon className="w-4 h-4" />
             ) : (
@@ -1018,28 +1335,50 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           
           {showInfo && (
             <div className="bg-blue-50 rounded-lg p-2 text-xs space-y-1">
-              <div className="font-semibold">{getExerciseName()}</div>
-              <div>Vista: {getViewLabel()}</div>
-              <div>Angolo principale: {angles.primary}°</div>
-              <div>Fase: {exercisePhase}</div>
-              <div>Qualità: {formQuality}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="font-semibold">Ripetizioni:</span> {repData.count}
+                </div>
+                <div>
+                  <span className="font-semibold">Tempo:</span> {formatTime(sessionTime)}
+                </div>
+                <div>
+                  <span className="font-semibold">Media Rep:</span> {repData.avgRepDuration.toFixed(1)}s
+                </div>
+                <div>
+                  <span className="font-semibold">Miglior Angolo:</span> {repData.bestDepth || '-'}°
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {/* Desktop Info */}
-        <div className="hidden sm:grid sm:grid-cols-4 gap-2 bg-blue-50 rounded-lg p-3 mt-2 text-sm">
-          <div>
-            <span className="font-semibold">Vista:</span> {getViewLabel()}
-          </div>
-          <div>
-            <span className="font-semibold">{getPrimaryAngleLabel()}:</span> {angles.primary}°
-          </div>
-          <div>
-            <span className="font-semibold">Fase:</span> {exercisePhase}
-          </div>
-          <div>
-            <span className="font-semibold">Forma:</span> {formQuality}
+        <div className="hidden sm:block bg-blue-50 rounded-lg p-3 mt-2">
+          <div className="grid grid-cols-5 gap-2 text-sm">
+            <div className="text-center">
+              <div className="font-semibold text-xs text-gray-600">REPS</div>
+              <div className="text-2xl font-bold text-blue-600">{repData.count}</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-xs text-gray-600">TEMPO</div>
+              <div className="text-lg font-mono">{formatTime(sessionTime)}</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-xs text-gray-600">MEDIA</div>
+              <div className="text-lg">{repData.avgRepDuration.toFixed(1)}s</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-xs text-gray-600">BEST</div>
+              <div className="text-lg">{repData.bestDepth || '-'}°</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-xs text-gray-600">QUALITÀ</div>
+              <div className="text-lg">
+                {repData.repQuality === 'perfect' ? '⭐' : 
+                 repData.repQuality === 'good' ? '✅' : '⚠️'}
+              </div>
+            </div>
           </div>
         </div>
       </div>
