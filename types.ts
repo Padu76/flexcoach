@@ -1,30 +1,22 @@
-
-export type ExerciseName = 'squat' | 'bench-press' | 'deadlift';
-
-export type ExerciseFeedback = {
-  timestamp: number;
-  message: string;
-};
-
-export type WorkoutSession = {
-  exercise: ExerciseName;
+export interface WorkoutSession {
   reps: number;
   feedback: ExerciseFeedback[];
-};
+}
 
-export type UserPreferences = {
-  preferredExercise: ExerciseName;
-  showSkeleton: boolean;
-};
+export interface ExerciseFeedback {
+  type: 'success' | 'warning' | 'error';
+  message: string;
+}
 
-export type ExerciseStats = {
-  totalReps: number;
-  sessionsCompleted: number;
-};
+export interface UserPreferences {
+  feedbackVoice: boolean;
+  feedbackSensitivity: 'low' | 'medium' | 'high';
+  units: 'metric' | 'imperial';
+  defaultExercise?: string;
+}
 
-export type User = {
+export interface User {
   id: string;
   name: string;
   preferences: UserPreferences;
-  stats: Record<ExerciseName, ExerciseStats>;
-};
+}
