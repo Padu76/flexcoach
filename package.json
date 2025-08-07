@@ -1,0 +1,72 @@
+{
+  "name": "flexcoach",
+  "version": "1.0.0",
+  "description": "AI-powered fitness trainer with real-time pose detection using MediaPipe and Next.js",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest --watch",
+    "test:ci": "jest --ci",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx,json,css,md}\"",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.0.18",
+    "@mediapipe/tasks-vision": "^0.10.0",
+    "@tanstack/react-query": "^5.17.0",
+    "firebase": "^10.7.0",
+    "next": "^14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-webcam": "^7.2.0",
+    "zod": "^3.22.4",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.4",
+    "husky": "^8.0.3",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "postcss": "^8.4.33",
+    "prettier": "^3.1.1",
+    "tailwindcss": "^3.4.0",
+    "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/typography": "^0.5.10",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "fitness",
+    "ai",
+    "mediapipe",
+    "pose-detection",
+    "nextjs",
+    "react",
+    "typescript",
+    "coaching",
+    "workout"
+  ],
+  "author": "FlexCoach Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/flexcoach.git"
+  }
+}
