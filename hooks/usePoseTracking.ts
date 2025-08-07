@@ -5,243 +5,287 @@ import type { UsePoseTrackingOptions, UsePoseTrackingReturn, Poselandmark } from
 interface PoseLandmarkerResult {
   landmarks: Poselandmark[][]
   worldLandmarks?: Poselandmark[][]
+  segmentationMasks?: any
+}
+
+// Declare MediaPipe types
+declare global {
+  interface Window {
+    PoseLandmarker: any
+    FilesetResolver: any
+  }
 }
 
 export const usePoseTracking = (options: UsePoseTrackingOptions = {}): UsePoseTrackingReturn => {
-  const [poseLandmarker, setPoseLandmarker] = useState<any>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const animationFrameRef = useRef<number>()
-  const lastVideoTimeRef = useRef(-1)
-  const detectionActiveRef = useRef(false)
+  const poseLandmarkerRef = useRef<any>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const isDetectingRef = useRef(false)
+  const retryCountRef = useRef(0)
+  const maxRetries = 10
 
-  // Configurazione default
+  // Configurazione con defaults
   const config = {
     modelComplexity: options.modelComplexity || 'lite',
-    minDetectionConfidence: options.minDetectionConfidence || 0.5,
+    minDetectionConfidence: options.minDetectionConfidence || 0.7,
     minTrackingConfidence: options.minTrackingConfidence || 0.5,
     maxNumPoses: options.maxNumPoses || 1
   }
 
-  // Inizializzazione MediaPipe
+  // Model paths basati sulla complessità
+  const getModelPath = () => {
+    switch (config.modelComplexity) {
+      case 'heavy':
+        return 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task'
+      case 'full':
+        return 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task'
+      default:
+        return 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
+    }
+  }
+
+  // Inizializza MediaPipe PoseLandmarker
   useEffect(() => {
-    const initializePoseLandmarker = async () => {
+    let isMounted = true
+
+    const initializeMediaPipe = async () => {
       try {
-        if (typeof window === 'undefined') {
-          console.log('🔄 Server-side rendering, skipping MediaPipe initialization')
-          return
+        console.log('🚀 Initializing MediaPipe PoseLandmarker...')
+        setError(null)
+
+        // Carica script MediaPipe se non già caricati
+        if (typeof window.PoseLandmarker === 'undefined') {
+          console.log('📦 Loading MediaPipe scripts...')
+          
+          // Carica pose_landmarker script
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@latest/pose.js'
+            script.crossOrigin = 'anonymous'
+            script.onload = () => resolve()
+            script.onerror = () => reject(new Error('Failed to load MediaPipe pose script'))
+            document.head.appendChild(script)
+          })
+
+          // Carica tasks-vision script
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest'
+            script.crossOrigin = 'anonymous'
+            script.onload = () => resolve()
+            script.onerror = () => reject(new Error('Failed to load MediaPipe tasks-vision'))
+            document.head.appendChild(script)
+          })
         }
 
-        console.log('🚀 Initializing MediaPipe PoseLandmarker...')
-        
-        // Import dinamico di MediaPipe
-        const { PoseLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision')
+        // Aspetta che gli script siano completamente caricati
+        let attempts = 0
+        while (typeof window.PoseLandmarker === 'undefined' && attempts < 20) {
+          console.log(`⏳ Waiting for MediaPipe to load... (attempt ${attempts + 1})`)
+          await new Promise(resolve => setTimeout(resolve, 500))
+          attempts++
+        }
 
-        // Risoluzione del fileset per vision tasks
+        if (typeof window.PoseLandmarker === 'undefined') {
+          throw new Error('MediaPipe PoseLandmarker not available after loading scripts')
+        }
+
         console.log('📦 Loading FilesetResolver...')
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        const vision = await window.FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
         )
-        console.log('✅ FilesetResolver loaded successfully')
 
-        // Path del modello basato sulla complessità
-        const modelPath = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${config.modelComplexity}/float16/1/pose_landmarker_${config.modelComplexity}.task`
-
-        console.log(`📥 Loading model: ${modelPath}`)
-
-        // Creazione del PoseLandmarker
-        const landmarker = await PoseLandmarker.createFromOptions(vision, {
+        console.log('🎯 Creating PoseLandmarker with model:', getModelPath())
+        const poseLandmarker = await window.PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: modelPath,
-            delegate: "GPU" // Usa GPU se disponibile
+            modelAssetPath: getModelPath(),
+            delegate: 'GPU'
           },
-          runningMode: "VIDEO",
+          runningMode: 'VIDEO',
           numPoses: config.maxNumPoses,
           minPoseDetectionConfidence: config.minDetectionConfidence,
-          minPosePresenceConfidence: 0.5,
-          minTrackingConfidence: config.minTrackingConfidence
+          minPosePresenceConfidence: config.minDetectionConfidence,
+          minTrackingConfidence: config.minTrackingConfidence,
+          outputSegmentationMasks: false
         })
 
-        console.log('✅ PoseLandmarker created successfully')
-        setPoseLandmarker(landmarker)
-        setIsInitialized(true)
-        console.log('🎯 MediaPipe PoseLandmarker fully initialized and ready!')
-        
+        if (isMounted) {
+          poseLandmarkerRef.current = poseLandmarker
+          setIsInitialized(true)
+          console.log('✅ MediaPipe PoseLandmarker initialized successfully')
+        }
+
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error during MediaPipe initialization'
+        const errorMessage = err instanceof Error ? err.message : 'Errore inizializzazione MediaPipe'
         console.error('❌ MediaPipe initialization error:', err)
-        setError(errorMessage)
+        if (isMounted) {
+          setError(errorMessage)
+          setIsInitialized(false)
+        }
       }
     }
 
-    initializePoseLandmarker()
+    initializeMediaPipe()
 
-    // Cleanup
     return () => {
-      console.log('🧹 Cleaning up usePoseTracking...')
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
-      }
-      if (poseLandmarker) {
+      isMounted = false
+      if (poseLandmarkerRef.current) {
         try {
-          poseLandmarker.close()
-          console.log('✅ PoseLandmarker closed successfully')
-        } catch (err) {
-          console.warn('⚠️ Error closing poseLandmarker:', err)
+          poseLandmarkerRef.current.close()
+        } catch (e) {
+          console.error('Error closing PoseLandmarker:', e)
         }
       }
     }
   }, [config.modelComplexity, config.minDetectionConfidence, config.minTrackingConfidence, config.maxNumPoses])
 
-  // Funzione di rilevamento pose con DEBUG DETTAGLIATO
-  const detectPose = useCallback((
-    onResults: (results: PoseLandmarkerResult) => void
-  ) => {
-    console.log('🔍 detectPose called with state:', {
-      poseLandmarker: !!poseLandmarker,
-      videoRef: !!videoRef.current,
-      isInitialized,
-      detectionActive: detectionActiveRef.current
-    })
+  // Funzione per verificare se il video è pronto
+  const isVideoReady = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return false
+    
+    // Check completo dello stato del video
+    const ready = video.readyState === 4 && 
+                  video.videoWidth > 0 && 
+                  video.videoHeight > 0 &&
+                  !video.paused &&
+                  !video.ended &&
+                  video.currentTime > 0
 
-    if (!poseLandmarker) {
-      console.warn('⚠️ PoseLandmarker not available')
+    if (!ready) {
+      console.log('📹 Video not ready:', {
+        readyState: video.readyState,
+        width: video.videoWidth,
+        height: video.videoHeight,
+        paused: video.paused,
+        currentTime: video.currentTime
+      })
+    }
+
+    return ready
+  }, [])
+
+  // Funzione di detection con retry logic
+  const detectPose = useCallback((onResults: (results: PoseLandmarkerResult) => void) => {
+    if (isDetectingRef.current) {
+      console.log('⚠️ Detection already in progress, skipping...')
+      return
+    }
+
+    if (!poseLandmarkerRef.current) {
+      console.warn('❌ PoseLandmarker not initialized')
       return
     }
 
     if (!videoRef.current) {
-      console.warn('⚠️ Video reference not available')
-      return
-    }
-
-    if (!isInitialized) {
-      console.warn('⚠️ PoseLandmarker not initialized')
-      return
-    }
-
-    if (detectionActiveRef.current) {
-      console.warn('⚠️ Detection already active, skipping')
+      console.warn('❌ Video element not found')
       return
     }
 
     const video = videoRef.current
-    console.log('📹 Video element state:', {
-      readyState: video.readyState,
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      currentTime: video.currentTime,
-      paused: video.paused
-    })
 
-    if (video.readyState < 2) {
-      console.warn('⚠️ Video not ready yet (readyState < 2)')
-      return
-    }
-
-    detectionActiveRef.current = true
-    console.log('🎬 Starting pose detection loop...')
-    
-    const performDetection = () => {
-      if (!detectionActiveRef.current) {
-        console.log('🛑 Detection stopped by flag')
+    // Funzione di detection con retry
+    const attemptDetection = () => {
+      // Verifica se il video è pronto
+      if (!isVideoReady()) {
+        retryCountRef.current++
+        
+        if (retryCountRef.current < maxRetries) {
+          console.log(`🔄 Video not ready, retry ${retryCountRef.current}/${maxRetries}...`)
+          setTimeout(attemptDetection, 500) // Riprova dopo 500ms
+        } else {
+          console.error('❌ Max retries reached, video still not ready')
+          retryCountRef.current = 0
+        }
         return
       }
 
-      // Controlla se il video è pronto e ha un nuovo frame
-      if (video.currentTime !== lastVideoTimeRef.current && video.videoWidth > 0) {
-        lastVideoTimeRef.current = video.currentTime
-        
-        try {
-          const startTimeMs = performance.now()
-          const results = poseLandmarker.detectForVideo(video, startTimeMs)
-          
-          // Log dei risultati (solo primi 5 secondi per non spammare)
-          if (startTimeMs < 5000) {
-            console.log('🎯 Detection results:', {
-              landmarks: results.landmarks?.length || 0,
-              poses: results.landmarks?.[0]?.length || 0
-            })
+      // Reset retry counter se il video è pronto
+      retryCountRef.current = 0
+      isDetectingRef.current = true
+
+      console.log('🎯 Starting pose detection loop...')
+      let lastVideoTime = -1
+
+      const detect = async () => {
+        if (!isDetectingRef.current || !poseLandmarkerRef.current || !videoRef.current) {
+          console.log('🛑 Stopping detection loop')
+          return
+        }
+
+        const video = videoRef.current
+        const currentTime = video.currentTime
+
+        // Solo processa se c'è un nuovo frame
+        if (currentTime !== lastVideoTime && isVideoReady()) {
+          lastVideoTime = currentTime
+
+          try {
+            // Usa detectForVideo con timestamp corretto
+            const startTimeMs = performance.now()
+            const results = await poseLandmarkerRef.current.detectForVideo(video, startTimeMs)
+            
+            // Converti risultati nel formato atteso
+            if (results && results.landmarks && results.landmarks.length > 0) {
+              console.log(`✅ Detected ${results.landmarks[0].length} landmarks`)
+              onResults({
+                landmarks: results.landmarks,
+                worldLandmarks: results.worldLandmarks,
+                segmentationMasks: results.segmentationMasks
+              })
+            } else {
+              // Nessun landmark rilevato ma non è un errore
+              onResults({ landmarks: [] })
+            }
+          } catch (err) {
+            console.error('❌ Detection error:', err)
+            // Non fermare il loop per errori temporanei
           }
-          
-          // Chiama il callback con i risultati
-          onResults(results)
-          
-        } catch (err) {
-          console.error('❌ Error during pose detection:', err)
-          // Non interrompere il loop per errori singoli
+        }
+
+        // Continua il loop con requestAnimationFrame
+        if (isDetectingRef.current) {
+          animationFrameRef.current = requestAnimationFrame(detect)
         }
       }
-      
-      // Continua il loop di detection
-      animationFrameRef.current = requestAnimationFrame(performDetection)
+
+      // Avvia il detection loop
+      detect()
     }
 
-    // Avvia il loop di detection
-    performDetection()
-  }, [poseLandmarker, isInitialized])
+    // Inizia il tentativo di detection
+    attemptDetection()
+  }, [isVideoReady])
 
-  // Funzione di cleanup
+  // Cleanup function per fermare la detection
   const cleanup = useCallback(() => {
-    console.log('🧹 Cleanup called')
-    detectionActiveRef.current = false
+    console.log('🧹 Cleaning up pose tracking...')
+    
+    isDetectingRef.current = false
     
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = undefined
-      console.log('✅ Animation frame cancelled')
+      animationFrameRef.current = null
     }
-    
-    if (poseLandmarker) {
+
+    if (poseLandmarkerRef.current) {
       try {
-        poseLandmarker.close()
-        console.log('✅ PoseLandmarker closed in cleanup')
-      } catch (err) {
-        console.warn('⚠️ Error during cleanup:', err)
+        poseLandmarkerRef.current.close()
+        poseLandmarkerRef.current = null
+      } catch (e) {
+        console.error('Error during cleanup:', e)
       }
     }
-    
-    setIsInitialized(false)
-    setPoseLandmarker(null)
-  }, [poseLandmarker])
-
-  // Debug info dettagliato
-  useEffect(() => {
-    console.log('📊 PoseTracking Hook State Update:', {
-      isInitialized,
-      error,
-      hasLandmarker: !!poseLandmarker,
-      hasVideoRef: !!videoRef.current,
-      detectionActive: detectionActiveRef.current,
-      config
-    })
-  }, [isInitialized, error, poseLandmarker, config])
-
-  // Monitor video state changes
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const handleLoadedData = () => {
-      console.log('📹 Video loaded data:', {
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        readyState: video.readyState
-      })
-    }
-
-    const handleCanPlay = () => {
-      console.log('📹 Video can play')
-    }
-
-    video.addEventListener('loadeddata', handleLoadedData)
-    video.addEventListener('canplay', handleCanPlay)
-
-    return () => {
-      video.removeEventListener('loadeddata', handleLoadedData)
-      video.removeEventListener('canplay', handleCanPlay)
-    }
   }, [])
+
+  // Cleanup al dismount
+  useEffect(() => {
+    return () => {
+      cleanup()
+    }
+  }, [cleanup])
 
   return {
     isInitialized,
