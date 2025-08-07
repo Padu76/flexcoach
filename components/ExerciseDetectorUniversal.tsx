@@ -1,4 +1,4 @@
-// components/ExerciseDetectorUniversal.tsx - Componente universale per tutti gli esercizi
+// components/ExerciseDetectorUniversal.tsx - Con Auto-Detect Vista
 
 'use client'
 
@@ -13,7 +13,9 @@ import {
   SpeakerWaveIcon,
   SpeakerXMarkIcon,
   ChevronUpIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  EyeIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 
 declare global {
@@ -28,6 +30,10 @@ declare global {
 // Indici dei landmark
 const POSE_LANDMARKS = {
   NOSE: 0,
+  LEFT_EYE: 2,
+  RIGHT_EYE: 5,
+  LEFT_EAR: 7,
+  RIGHT_EAR: 8,
   LEFT_SHOULDER: 11,
   RIGHT_SHOULDER: 12,
   LEFT_ELBOW: 13,
@@ -41,6 +47,8 @@ const POSE_LANDMARKS = {
   LEFT_ANKLE: 27,
   RIGHT_ANKLE: 28,
 }
+
+type ViewOrientation = 'lateral' | 'frontal' | 'unknown'
 
 interface Props {
   exerciseType: ExerciseType
@@ -57,6 +65,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [showInfo, setShowInfo] = useState(false)
   const [isLandscape, setIsLandscape] = useState(false)
   
+  // Auto-detect vista
+  const [viewOrientation, setViewOrientation] = useState<ViewOrientation>('unknown')
+  const [viewWarning, setViewWarning] = useState<string>('')
+  
   const { initializeAudio, isInitialized: isAudioReady, isMuted, toggleMute, sounds } = useSoundFeedback()
   
   const [repCount, setRepCount] = useState(0)
@@ -65,9 +77,9 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const lastSoundTimeRef = useRef<number>(0)
   
   const [angles, setAngles] = useState({
-    primary: 0,    // Angolo principale per ogni esercizio
-    secondary: 0,  // Angolo secondario
-    tertiary: 0,   // Angolo terziario
+    primary: 0,
+    secondary: 0,
+    tertiary: 0,
   })
   
   const [exercisePhase, setExercisePhase] = useState<'start' | 'middle' | 'end'>('start')
@@ -75,7 +87,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   
   const { videoRef, isStreamActive, error: cameraError, startCamera, stopCamera } = useCamera()
 
-  // Detect orientamento
+  // Detect orientamento schermo
   useEffect(() => {
     const handleOrientationChange = () => {
       const landscape = window.innerWidth > window.innerHeight
@@ -101,6 +113,59 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     }
   }, [])
 
+  // Funzione per rilevare l'orientamento del corpo
+  const detectViewOrientation = (landmarks: any[]): ViewOrientation => {
+    // Calcola la distanza tra le spalle in X (larghezza)
+    const shoulderWidth = Math.abs(
+      landmarks[POSE_LANDMARKS.LEFT_SHOULDER].x - 
+      landmarks[POSE_LANDMARKS.RIGHT_SHOULDER].x
+    )
+    
+    // Calcola la profondità delle spalle in Z
+    const shoulderDepth = Math.abs(
+      landmarks[POSE_LANDMARKS.LEFT_SHOULDER].z - 
+      landmarks[POSE_LANDMARKS.RIGHT_SHOULDER].z
+    )
+    
+    // Calcola visibility delle orecchie (laterale = una visibile, frontale = entrambe)
+    const leftEarVis = landmarks[POSE_LANDMARKS.LEFT_EAR]?.visibility || 0
+    const rightEarVis = landmarks[POSE_LANDMARKS.RIGHT_EAR]?.visibility || 0
+    
+    // Calcola visibility dei fianchi
+    const leftHipVis = landmarks[POSE_LANDMARKS.LEFT_HIP]?.visibility || 0
+    const rightHipVis = landmarks[POSE_LANDMARKS.RIGHT_HIP]?.visibility || 0
+    
+    // Logica di detection
+    if (shoulderWidth > 0.15) {
+      // Spalle larghe = vista frontale
+      if (leftEarVis > 0.5 && rightEarVis > 0.5) {
+        return 'frontal'
+      }
+    }
+    
+    if (shoulderWidth < 0.08) {
+      // Spalle strette = vista laterale
+      if ((leftEarVis > 0.5 && rightEarVis < 0.3) || 
+          (rightEarVis > 0.5 && leftEarVis < 0.3)) {
+        return 'lateral'
+      }
+    }
+    
+    // Backup check con i fianchi
+    const hipWidth = Math.abs(
+      landmarks[POSE_LANDMARKS.LEFT_HIP].x - 
+      landmarks[POSE_LANDMARKS.RIGHT_HIP].x
+    )
+    
+    if (hipWidth > 0.12 && leftHipVis > 0.5 && rightHipVis > 0.5) {
+      return 'frontal'
+    } else if (hipWidth < 0.06) {
+      return 'lateral'
+    }
+    
+    return 'unknown'
+  }
+
   // Calcola angolo tra 3 punti
   const calculateAngle = (a: any, b: any, c: any): number => {
     const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x)
@@ -113,162 +178,299 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     return Math.round(angle)
   }
 
-  // Analisi specifica per SQUAT
-  const analyzeSquat = (landmarks: any[]) => {
-    const leftKneeAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_HIP],
-      landmarks[POSE_LANDMARKS.LEFT_KNEE],
-      landmarks[POSE_LANDMARKS.LEFT_ANKLE]
-    )
-    
-    const rightKneeAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.RIGHT_HIP],
-      landmarks[POSE_LANDMARKS.RIGHT_KNEE],
-      landmarks[POSE_LANDMARKS.RIGHT_ANKLE]
-    )
-    
-    const leftHipAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
-      landmarks[POSE_LANDMARKS.LEFT_HIP],
-      landmarks[POSE_LANDMARKS.LEFT_KNEE]
-    )
-    
-    const avgKnee = Math.round((leftKneeAngle + rightKneeAngle) / 2)
-    const avgHip = Math.round(leftHipAngle)
-    
-    setAngles({
-      primary: avgKnee,    // Ginocchio
-      secondary: avgHip,   // Anca
-      tertiary: 0
-    })
-    
-    // Determina fase
-    let phase: 'start' | 'middle' | 'end' = 'start'
-    if (avgKnee > 160) {
-      phase = 'start'
-    } else if (avgKnee > 90) {
-      phase = 'middle'
-    } else {
-      phase = 'end'
+  // Analisi SQUAT con auto-detect vista
+  const analyzeSquat = (landmarks: any[], view: ViewOrientation) => {
+    if (view === 'lateral') {
+      // Analisi laterale standard (profondità)
+      const leftKneeAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_HIP],
+        landmarks[POSE_LANDMARKS.LEFT_KNEE],
+        landmarks[POSE_LANDMARKS.LEFT_ANKLE]
+      )
+      
+      const rightKneeAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.RIGHT_HIP],
+        landmarks[POSE_LANDMARKS.RIGHT_KNEE],
+        landmarks[POSE_LANDMARKS.RIGHT_ANKLE]
+      )
+      
+      const leftHipAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
+        landmarks[POSE_LANDMARKS.LEFT_HIP],
+        landmarks[POSE_LANDMARKS.LEFT_KNEE]
+      )
+      
+      const avgKnee = Math.round((leftKneeAngle + rightKneeAngle) / 2)
+      const avgHip = Math.round(leftHipAngle)
+      
+      setAngles({
+        primary: avgKnee,
+        secondary: avgHip,
+        tertiary: 0
+      })
+      
+      // Fase e qualità
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (avgKnee > 160) phase = 'start'
+      else if (avgKnee > 90) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      if (avgKnee > 70 && avgKnee < 110) {
+        setFormQuality('ottimo')
+      } else if (avgKnee > 60 && avgKnee < 130) {
+        setFormQuality('buono')
+      } else {
+        setFormQuality('correggi')
+      }
+      
+      setViewWarning('')
+      return { phase, avgKnee }
+      
+    } else if (view === 'frontal') {
+      // Analisi frontale (simmetria e allineamento ginocchia)
+      const leftKneeX = landmarks[POSE_LANDMARKS.LEFT_KNEE].x
+      const rightKneeX = landmarks[POSE_LANDMARKS.RIGHT_KNEE].x
+      const leftAnkleX = landmarks[POSE_LANDMARKS.LEFT_ANKLE].x
+      const rightAnkleX = landmarks[POSE_LANDMARKS.RIGHT_ANKLE].x
+      
+      // Calcola allineamento ginocchia (valgismo/varismo)
+      const leftAlignment = Math.abs(leftKneeX - leftAnkleX) * 100
+      const rightAlignment = Math.abs(rightKneeX - rightAnkleX) * 100
+      const avgAlignment = (leftAlignment + rightAlignment) / 2
+      
+      // Calcola simmetria
+      const symmetry = Math.abs(leftAlignment - rightAlignment)
+      
+      // Stima profondità dal movimento verticale dei fianchi
+      const hipY = (landmarks[POSE_LANDMARKS.LEFT_HIP].y + 
+                   landmarks[POSE_LANDMARKS.RIGHT_HIP].y) / 2
+      
+      setAngles({
+        primary: Math.round(avgAlignment * 10), // Allineamento ginocchia
+        secondary: Math.round(symmetry * 10),    // Simmetria
+        tertiary: Math.round(hipY * 180)         // Stima profondità
+      })
+      
+      // Fase basata su posizione verticale fianchi
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (hipY < 0.5) phase = 'start'
+      else if (hipY < 0.65) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      // Qualità basata su allineamento
+      if (avgAlignment < 5 && symmetry < 3) {
+        setFormQuality('ottimo')
+      } else if (avgAlignment < 10 && symmetry < 6) {
+        setFormQuality('buono')
+      } else {
+        setFormQuality('correggi')
+      }
+      
+      setViewWarning('⚠️ Vista frontale: analisi limitata profondità')
+      return { phase, avgKnee: 0 }
     }
-    setExercisePhase(phase)
     
-    // Qualità forma
-    if (avgKnee > 70 && avgKnee < 110) {
-      setFormQuality('ottimo')
-    } else if (avgKnee > 60 && avgKnee < 130) {
-      setFormQuality('buono')
-    } else {
-      setFormQuality('correggi')
-    }
-    
-    return { phase, avgKnee }
+    setViewWarning('❌ Posizionati di lato per analisi completa')
+    return { phase: 'start', avgKnee: 0 }
   }
 
-  // Analisi specifica per PANCA PIANA
-  const analyzeBenchPress = (landmarks: any[]) => {
-    // Angolo gomito sinistro
-    const leftElbowAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
-      landmarks[POSE_LANDMARKS.LEFT_ELBOW],
-      landmarks[POSE_LANDMARKS.LEFT_WRIST]
-    )
-    
-    // Angolo gomito destro
-    const rightElbowAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.RIGHT_SHOULDER],
-      landmarks[POSE_LANDMARKS.RIGHT_ELBOW],
-      landmarks[POSE_LANDMARKS.RIGHT_WRIST]
-    )
-    
-    // Angolo spalla (profondità del movimento)
-    const shoulderAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_ELBOW],
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
-      landmarks[POSE_LANDMARKS.LEFT_HIP]
-    )
-    
-    const avgElbow = Math.round((leftElbowAngle + rightElbowAngle) / 2)
-    
-    setAngles({
-      primary: avgElbow,        // Gomito
-      secondary: shoulderAngle, // Spalla
-      tertiary: Math.abs(leftElbowAngle - rightElbowAngle) // Simmetria
-    })
-    
-    // Determina fase (inversa rispetto allo squat)
-    let phase: 'start' | 'middle' | 'end' = 'start'
-    if (avgElbow > 160) {
-      phase = 'start'  // Braccia estese
-    } else if (avgElbow > 90) {
-      phase = 'middle'
-    } else {
-      phase = 'end'    // Barra al petto
+  // Analisi PANCA con auto-detect vista
+  const analyzeBenchPress = (landmarks: any[], view: ViewOrientation) => {
+    if (view === 'lateral') {
+      // Vista laterale standard
+      const leftElbowAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
+        landmarks[POSE_LANDMARKS.LEFT_ELBOW],
+        landmarks[POSE_LANDMARKS.LEFT_WRIST]
+      )
+      
+      const rightElbowAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.RIGHT_SHOULDER],
+        landmarks[POSE_LANDMARKS.RIGHT_ELBOW],
+        landmarks[POSE_LANDMARKS.RIGHT_WRIST]
+      )
+      
+      const shoulderAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_ELBOW],
+        landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
+        landmarks[POSE_LANDMARKS.LEFT_HIP]
+      )
+      
+      const avgElbow = Math.round((leftElbowAngle + rightElbowAngle) / 2)
+      
+      setAngles({
+        primary: avgElbow,
+        secondary: shoulderAngle,
+        tertiary: Math.abs(leftElbowAngle - rightElbowAngle)
+      })
+      
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (avgElbow > 160) phase = 'start'
+      else if (avgElbow > 90) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      if (avgElbow > 70 && avgElbow < 100) {
+        setFormQuality('ottimo')
+      } else if (avgElbow > 60 && avgElbow < 110) {
+        setFormQuality('buono')
+      } else {
+        setFormQuality('correggi')
+      }
+      
+      setViewWarning('')
+      return { phase, avgElbow }
+      
+    } else if (view === 'frontal') {
+      // Vista frontale - ottima per simmetria
+      const leftElbowY = landmarks[POSE_LANDMARKS.LEFT_ELBOW].y
+      const rightElbowY = landmarks[POSE_LANDMARKS.RIGHT_ELBOW].y
+      const leftWristY = landmarks[POSE_LANDMARKS.LEFT_WRIST].y
+      const rightWristY = landmarks[POSE_LANDMARKS.RIGHT_WRIST].y
+      
+      // Simmetria altezza gomiti
+      const elbowSymmetry = Math.abs(leftElbowY - rightElbowY) * 100
+      
+      // Simmetria altezza polsi
+      const wristSymmetry = Math.abs(leftWristY - rightWristY) * 100
+      
+      // Larghezza presa
+      const gripWidth = Math.abs(
+        landmarks[POSE_LANDMARKS.LEFT_WRIST].x - 
+        landmarks[POSE_LANDMARKS.RIGHT_WRIST].x
+      ) * 100
+      
+      setAngles({
+        primary: Math.round(elbowSymmetry),
+        secondary: Math.round(wristSymmetry),
+        tertiary: Math.round(gripWidth)
+      })
+      
+      // Stima fase dal movimento verticale
+      const avgWristY = (leftWristY + rightWristY) / 2
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (avgWristY < 0.4) phase = 'start'
+      else if (avgWristY < 0.55) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      // Qualità basata su simmetria
+      if (elbowSymmetry < 2 && wristSymmetry < 2) {
+        setFormQuality('ottimo')
+        setViewWarning('✅ Vista frontale: ottima per simmetria!')
+      } else if (elbowSymmetry < 5 && wristSymmetry < 5) {
+        setFormQuality('buono')
+        setViewWarning('👍 Vista frontale: controllo simmetria')
+      } else {
+        setFormQuality('correggi')
+        setViewWarning('⚠️ Movimento asimmetrico rilevato')
+      }
+      
+      return { phase, avgElbow: 0 }
     }
-    setExercisePhase(phase)
     
-    // Qualità forma
-    if (avgElbow > 70 && avgElbow < 100 && Math.abs(leftElbowAngle - rightElbowAngle) < 10) {
-      setFormQuality('ottimo')
-    } else if (avgElbow > 60 && avgElbow < 110 && Math.abs(leftElbowAngle - rightElbowAngle) < 20) {
-      setFormQuality('buono')
-    } else {
-      setFormQuality('correggi')
-    }
-    
-    return { phase, avgElbow }
+    setViewWarning('❌ Posizionati correttamente')
+    return { phase: 'start', avgElbow: 0 }
   }
 
-  // Analisi specifica per STACCO DA TERRA
-  const analyzeDeadlift = (landmarks: any[]) => {
-    // Angolo anca
-    const hipAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
-      landmarks[POSE_LANDMARKS.LEFT_HIP],
-      landmarks[POSE_LANDMARKS.LEFT_KNEE]
-    )
-    
-    // Angolo ginocchio
-    const kneeAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_HIP],
-      landmarks[POSE_LANDMARKS.LEFT_KNEE],
-      landmarks[POSE_LANDMARKS.LEFT_ANKLE]
-    )
-    
-    // Angolo schiena (allineamento)
-    const backAngle = calculateAngle(
-      landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
-      landmarks[POSE_LANDMARKS.LEFT_HIP],
-      landmarks[POSE_LANDMARKS.LEFT_ANKLE]
-    )
-    
-    setAngles({
-      primary: hipAngle,   // Anca
-      secondary: kneeAngle, // Ginocchio
-      tertiary: backAngle  // Schiena
-    })
-    
-    // Determina fase
-    let phase: 'start' | 'middle' | 'end' = 'start'
-    if (hipAngle < 90) {
-      phase = 'start'  // Posizione bassa
-    } else if (hipAngle < 135) {
-      phase = 'middle'
-    } else {
-      phase = 'end'    // In piedi
+  // Analisi STACCO con auto-detect vista
+  const analyzeDeadlift = (landmarks: any[], view: ViewOrientation) => {
+    if (view === 'lateral') {
+      // Vista laterale standard
+      const hipAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
+        landmarks[POSE_LANDMARKS.LEFT_HIP],
+        landmarks[POSE_LANDMARKS.LEFT_KNEE]
+      )
+      
+      const kneeAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_HIP],
+        landmarks[POSE_LANDMARKS.LEFT_KNEE],
+        landmarks[POSE_LANDMARKS.LEFT_ANKLE]
+      )
+      
+      const backAngle = calculateAngle(
+        landmarks[POSE_LANDMARKS.LEFT_SHOULDER],
+        landmarks[POSE_LANDMARKS.LEFT_HIP],
+        landmarks[POSE_LANDMARKS.LEFT_ANKLE]
+      )
+      
+      setAngles({
+        primary: hipAngle,
+        secondary: kneeAngle,
+        tertiary: backAngle
+      })
+      
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (hipAngle < 90) phase = 'start'
+      else if (hipAngle < 135) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      if (hipAngle > 80 && hipAngle < 170 && backAngle > 140) {
+        setFormQuality('ottimo')
+      } else if (hipAngle > 70 && hipAngle < 180 && backAngle > 130) {
+        setFormQuality('buono')
+      } else {
+        setFormQuality('correggi')
+      }
+      
+      setViewWarning('')
+      return { phase, avgAngle: hipAngle }
+      
+    } else if (view === 'frontal') {
+      // Vista frontale - controllo stance e simmetria
+      const leftHipX = landmarks[POSE_LANDMARKS.LEFT_HIP].x
+      const rightHipX = landmarks[POSE_LANDMARKS.RIGHT_HIP].x
+      const leftAnkleX = landmarks[POSE_LANDMARKS.LEFT_ANKLE].x
+      const rightAnkleX = landmarks[POSE_LANDMARKS.RIGHT_ANKLE].x
+      
+      // Larghezza stance
+      const stanceWidth = Math.abs(leftAnkleX - rightAnkleX) * 100
+      
+      // Simmetria fianchi
+      const hipSymmetry = Math.abs(
+        landmarks[POSE_LANDMARKS.LEFT_HIP].y - 
+        landmarks[POSE_LANDMARKS.RIGHT_HIP].y
+      ) * 100
+      
+      setAngles({
+        primary: Math.round(stanceWidth),
+        secondary: Math.round(hipSymmetry),
+        tertiary: 0
+      })
+      
+      // Stima fase
+      const avgHipY = (landmarks[POSE_LANDMARKS.LEFT_HIP].y + 
+                      landmarks[POSE_LANDMARKS.RIGHT_HIP].y) / 2
+      let phase: 'start' | 'middle' | 'end' = 'start'
+      if (avgHipY > 0.6) phase = 'start'
+      else if (avgHipY > 0.45) phase = 'middle'
+      else phase = 'end'
+      
+      setExercisePhase(phase)
+      
+      if (stanceWidth > 15 && stanceWidth < 40 && hipSymmetry < 3) {
+        setFormQuality('ottimo')
+      } else if (hipSymmetry < 6) {
+        setFormQuality('buono')
+      } else {
+        setFormQuality('correggi')
+      }
+      
+      setViewWarning('⚠️ Vista laterale consigliata per controllo schiena')
+      return { phase, avgAngle: 0 }
     }
-    setExercisePhase(phase)
     
-    // Qualità forma
-    if (hipAngle > 80 && hipAngle < 170 && backAngle > 140) {
-      setFormQuality('ottimo')
-    } else if (hipAngle > 70 && hipAngle < 180 && backAngle > 130) {
-      setFormQuality('buono')
-    } else {
-      setFormQuality('correggi')
-    }
-    
-    return { phase, avgAngle: hipAngle }
+    setViewWarning('❌ Posizionati di lato per sicurezza schiena')
+    return { phase: 'start', avgAngle: 0 }
   }
 
   // Gestione feedback audio
@@ -280,7 +482,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     
     if (timeSinceLastSound < 1000) return
     
-    // Feedback qualità
     if (quality === 'correggi' && timeSinceLastSound > 2000) {
       sounds.scendi()
       lastSoundTimeRef.current = now
@@ -289,7 +490,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       lastSoundTimeRef.current = now
     }
     
-    // Conteggio ripetizioni
     if (previousPhaseRef.current === 'start' && phase === 'end') {
       setIsInRep(true)
     } else if (previousPhaseRef.current === 'end' && phase === 'start' && isInRep) {
@@ -361,18 +561,22 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             
             const landmarks = results.poseLandmarks
             
-            // Analisi specifica per esercizio
+            // AUTO-DETECT VISTA
+            const detectedView = detectViewOrientation(landmarks)
+            setViewOrientation(detectedView)
+            
+            // Analisi con vista rilevata
             let analysisResult: any = {}
             
             switch (exerciseType) {
               case 'squat':
-                analysisResult = analyzeSquat(landmarks)
+                analysisResult = analyzeSquat(landmarks, detectedView)
                 break
               case 'bench-press':
-                analysisResult = analyzeBenchPress(landmarks)
+                analysisResult = analyzeBenchPress(landmarks, detectedView)
                 break
               case 'deadlift':
-                analysisResult = analyzeDeadlift(landmarks)
+                analysisResult = analyzeDeadlift(landmarks, detectedView)
                 break
             }
             
@@ -380,9 +584,11 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               handleSoundFeedback(exercisePhase, formQuality)
             }
             
-            // Colore basato su qualità
+            // Colore basato su qualità e vista
             let connectionColor = '#00FF00'
-            if (formQuality === 'ottimo') {
+            if (detectedView === 'unknown') {
+              connectionColor = '#FF00FF' // Viola per vista non riconosciuta
+            } else if (formQuality === 'ottimo') {
               connectionColor = '#00FF00'
             } else if (formQuality === 'buono') {
               connectionColor = '#FFFF00'
@@ -407,6 +613,17 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
                 fillColor: connectionColor
               }
             )
+            
+            // Indicatore vista nell'angolo
+            ctx.font = `bold ${isLandscape ? 20 : 16}px Arial`
+            ctx.fillStyle = detectedView === 'unknown' ? '#FF00FF' : 
+                           detectedView === 'lateral' ? '#00FF00' : '#00FFFF'
+            ctx.strokeStyle = '#000000'
+            ctx.lineWidth = 2
+            const viewText = detectedView === 'lateral' ? '👁️ LAT' : 
+                           detectedView === 'frontal' ? '👁️ FRONT' : '❓'
+            ctx.strokeText(viewText, 10, 30)
+            ctx.fillText(viewText, 10, 30)
             
             // Counter reps
             if (repCount > 0) {
@@ -483,6 +700,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setIsActive(true)
       setRepCount(0)
       setIsInRep(false)
+      setViewOrientation('unknown')
+      setViewWarning('')
       
       if (!isMuted) {
         setTimeout(() => sounds.start(), 500)
@@ -509,6 +728,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       secondary: 0,
       tertiary: 0
     })
+    setViewOrientation('unknown')
+    setViewWarning('')
     
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d')
@@ -562,27 +783,48 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }
 
   const getFeedbackMessage = () => {
+    // Se vista non riconosciuta
+    if (viewOrientation === 'unknown') {
+      return '❓ Posizionati meglio per analisi'
+    }
+    
     switch (exerciseType) {
       case 'squat':
-        if (angles.primary > 160) return '📏 Scendi di più!'
-        if (angles.primary > 120) return '⬇️ Continua a scendere'
-        if (angles.primary > 90) return '✅ Quasi parallelo!'
-        if (angles.primary > 70) return '🎯 Profondità perfetta!'
-        return '⚠️ Troppo profondo'
+        if (viewOrientation === 'frontal') {
+          if (angles.primary < 5) return '✅ Ginocchia allineate!'
+          if (angles.primary < 10) return '⚖️ Controlla allineamento'
+          return '⚠️ Ginocchia non allineate'
+        } else {
+          if (angles.primary > 160) return '📏 Scendi di più!'
+          if (angles.primary > 120) return '⬇️ Continua a scendere'
+          if (angles.primary > 90) return '✅ Quasi parallelo!'
+          if (angles.primary > 70) return '🎯 Profondità perfetta!'
+          return '⚠️ Troppo profondo'
+        }
         
       case 'bench-press':
-        if (angles.primary > 160) return '💪 Scendi al petto!'
-        if (angles.primary > 120) return '⬇️ Ancora un po\''
-        if (angles.primary > 80) return '✅ Ottima profondità!'
-        if (angles.tertiary > 15) return '⚖️ Bilancia i gomiti!'
-        return '🎯 Perfetto!'
+        if (viewOrientation === 'frontal') {
+          if (angles.primary < 2) return '✅ Perfetta simmetria!'
+          if (angles.primary < 5) return '👍 Buona simmetria'
+          return '⚖️ Correggi asimmetria'
+        } else {
+          if (angles.primary > 160) return '💪 Scendi al petto!'
+          if (angles.primary > 120) return '⬇️ Ancora un po\''
+          if (angles.primary > 80) return '✅ Ottima profondità!'
+          return '🎯 Perfetto!'
+        }
         
       case 'deadlift':
-        if (angles.primary < 90) return '🏋️ Solleva!'
-        if (angles.primary < 135) return '⬆️ Estendi le anche'
-        if (angles.tertiary < 140) return '🦴 Mantieni la schiena dritta!'
-        if (angles.primary > 160) return '✅ Completo!'
-        return '🎯 Ottimo movimento!'
+        if (viewOrientation === 'frontal') {
+          if (angles.primary > 15 && angles.primary < 40) return '✅ Stance corretta!'
+          return '👟 Correggi larghezza piedi'
+        } else {
+          if (angles.primary < 90) return '🏋️ Solleva!'
+          if (angles.primary < 135) return '⬆️ Estendi le anche'
+          if (angles.tertiary < 140) return '🦴 Mantieni la schiena dritta!'
+          if (angles.primary > 160) return '✅ Completo!'
+          return '🎯 Ottimo movimento!'
+        }
         
       default:
         return '...'
@@ -599,11 +841,36 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }
 
   const getPrimaryAngleLabel = () => {
-    switch (exerciseType) {
-      case 'squat': return 'Ginocchio'
-      case 'bench-press': return 'Gomito'
-      case 'deadlift': return 'Anca'
-      default: return 'Angolo'
+    if (viewOrientation === 'frontal') {
+      switch (exerciseType) {
+        case 'squat': return 'Allineamento'
+        case 'bench-press': return 'Simmetria'
+        case 'deadlift': return 'Stance'
+        default: return 'Analisi'
+      }
+    } else {
+      switch (exerciseType) {
+        case 'squat': return 'Ginocchio'
+        case 'bench-press': return 'Gomito'
+        case 'deadlift': return 'Anca'
+        default: return 'Angolo'
+      }
+    }
+  }
+
+  const getViewIcon = () => {
+    switch(viewOrientation) {
+      case 'lateral': return '👤'
+      case 'frontal': return '👥'
+      case 'unknown': return '❓'
+    }
+  }
+
+  const getViewLabel = () => {
+    switch(viewOrientation) {
+      case 'lateral': return 'Vista Laterale'
+      case 'frontal': return 'Vista Frontale'
+      case 'unknown': return 'Vista Non Rilevata'
     }
   }
 
@@ -623,6 +890,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               <span className="text-green-400">
                 {getPrimaryAngleLabel()}: {angles.primary}°
               </span>
+              <span className={`px-2 py-0.5 rounded text-xs ${
+                viewOrientation === 'lateral' ? 'bg-green-600' :
+                viewOrientation === 'frontal' ? 'bg-cyan-600' :
+                'bg-purple-600'
+              }`}>
+                {getViewIcon()} {getViewLabel()}
+              </span>
             </>
           )}
         </div>
@@ -637,6 +911,21 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           )}
         </button>
       </div>
+
+      {/* View Warning Banner */}
+      {viewWarning && isActive && (
+        <div className={`px-3 py-1 text-xs sm:text-sm font-medium text-center ${
+          viewWarning.includes('✅') ? 'bg-green-600 text-white' :
+          viewWarning.includes('⚠️') ? 'bg-yellow-500 text-black' :
+          viewWarning.includes('👍') ? 'bg-blue-600 text-white' :
+          'bg-red-600 text-white'
+        }`}>
+          <div className="flex items-center justify-center gap-2">
+            <EyeIcon className="w-4 h-4" />
+            {viewWarning}
+          </div>
+        </div>
+      )}
 
       {/* Video Container */}
       <div 
@@ -730,6 +1019,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           {showInfo && (
             <div className="bg-blue-50 rounded-lg p-2 text-xs space-y-1">
               <div className="font-semibold">{getExerciseName()}</div>
+              <div>Vista: {getViewLabel()}</div>
               <div>Angolo principale: {angles.primary}°</div>
               <div>Fase: {exercisePhase}</div>
               <div>Qualità: {formQuality}</div>
@@ -738,7 +1028,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         </div>
 
         {/* Desktop Info */}
-        <div className="hidden sm:grid sm:grid-cols-3 gap-2 bg-blue-50 rounded-lg p-3 mt-2 text-sm">
+        <div className="hidden sm:grid sm:grid-cols-4 gap-2 bg-blue-50 rounded-lg p-3 mt-2 text-sm">
+          <div>
+            <span className="font-semibold">Vista:</span> {getViewLabel()}
+          </div>
           <div>
             <span className="font-semibold">{getPrimaryAngleLabel()}:</span> {angles.primary}°
           </div>
