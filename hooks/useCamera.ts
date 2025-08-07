@@ -1,4 +1,4 @@
-// hooks/useCamera.ts - Hook semplice per gestire la webcam
+// hooks/useCamera.ts - Hook fixed per gestire la webcam
 
 import { useRef, useState, useCallback, useEffect } from 'react'
 import type { UseCameraOptions, UseCameraReturn } from '@/types'
@@ -20,9 +20,10 @@ export const useCamera = (options: UseCameraOptions = {}): UseCameraReturn => {
       setError(null)
       console.log('📹 Avvio camera...')
 
-      // Ferma stream esistente
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
+      // Se c'è già uno stream attivo, non fare nulla
+      if (streamRef.current && isStreamActive) {
+        console.log('⚠️ Camera già attiva')
+        return
       }
 
       // Controlla supporto
@@ -47,17 +48,35 @@ export const useCamera = (options: UseCameraOptions = {}): UseCameraReturn => {
         videoRef.current.srcObject = stream
         
         // Aspetta che il video sia pronto
-        await new Promise<void>((resolve) => {
-          if (!videoRef.current) return resolve()
+        await new Promise<void>((resolve, reject) => {
+          if (!videoRef.current) {
+            reject(new Error('Video element non trovato'))
+            return
+          }
           
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play()
-            resolve()
+          const video = videoRef.current
+          
+          // Timeout per evitare attese infinite
+          const timeout = setTimeout(() => {
+            reject(new Error('Timeout caricamento video'))
+          }, 5000)
+          
+          video.onloadedmetadata = () => {
+            clearTimeout(timeout)
+            video.play()
+              .then(() => {
+                console.log('✅ Camera avviata con successo!')
+                setIsStreamActive(true)
+                resolve()
+              })
+              .catch(reject)
+          }
+          
+          video.onerror = () => {
+            clearTimeout(timeout)
+            reject(new Error('Errore caricamento video'))
           }
         })
-
-        setIsStreamActive(true)
-        console.log('✅ Camera avviata!')
       }
 
     } catch (err) {
@@ -65,33 +84,38 @@ export const useCamera = (options: UseCameraOptions = {}): UseCameraReturn => {
       console.error('❌ Errore camera:', errorMsg)
       setError(errorMsg)
       setIsStreamActive(false)
+      
+      // Pulisci in caso di errore
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
     }
-  }, [config.width, config.height, config.facingMode])
+  }, [config.width, config.height, config.facingMode, isStreamActive])
 
   const stopCamera = useCallback(() => {
+    console.log('🛑 Fermando camera...')
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         track.stop()
-        console.log('🛑 Camera fermata')
+        console.log(`🛑 Track ${track.kind} fermato`)
       })
       streamRef.current = null
     }
 
     if (videoRef.current) {
       videoRef.current.srcObject = null
+      videoRef.current.load() // Reset video element
     }
 
     setIsStreamActive(false)
     setError(null)
   }, [])
 
-  // Cleanup al dismount
-  useEffect(() => {
-    return () => {
-      stopCamera()
-    }
-  }, [stopCamera])
-
+  // NON fare cleanup automatico al dismount per evitare conflitti
+  // Il componente padre gestirà quando fermare la camera
+  
   return {
     videoRef,
     isStreamActive,
