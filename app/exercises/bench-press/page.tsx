@@ -103,7 +103,7 @@ export default function BenchPressPage() {
               <ul className="space-y-2 text-xs text-yellow-800">
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
-                  <span>Gomiti troppo aperti (>90° rispetto al busto)</span>
+                  <span>Gomiti troppo aperti (&gt;90° rispetto al busto)</span>
                 </li>
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
