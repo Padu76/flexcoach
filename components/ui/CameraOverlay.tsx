@@ -1,22 +1,37 @@
+"use client";
+import React from "react";
 
-'use client';
+type PositionStatus = "tooClose" | "tooFar" | "moveLeft" | "moveRight" | "ok";
 
-import React from 'react';
-import '../styles/Overlay.css';
-
-type OverlayProps = {
-  positionStatus: string;
+const messages: Record<PositionStatus, string> = {
+  tooClose: "Allontanati dalla fotocamera",
+  tooFar: "Avvicinati alla fotocamera",
+  moveLeft: "Spostati a sinistra",
+  moveRight: "Spostati a destra",
+  ok: "",
 };
 
-const CameraOverlay: React.FC<OverlayProps> = ({ positionStatus }) => {
+export default function CameraOverlay({ positionStatus }: { positionStatus: PositionStatus }) {
+  const message = messages[positionStatus];
+
+  if (!message) return null;
+
   return (
-    <div className="camera-overlay">
-      {positionStatus === 'too_close' && <p>Allontanati</p>}
-      {positionStatus === 'too_far' && <p>Avvicinati</p>}
-      {positionStatus === 'too_left' && <p>Spostati a destra</p>}
-      {positionStatus === 'too_right' && <p>Spostati a sinistra</p>}
+    <div
+      style={{
+        position: "absolute",
+        top: 20,
+        left: "50%",
+        transform: "translateX(-50%)",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        color: "white",
+        padding: "10px 20px",
+        borderRadius: "8px",
+        fontSize: "18px",
+        zIndex: 1000,
+      }}
+    >
+      {message}
     </div>
   );
-};
-
-export default CameraOverlay;
+}
