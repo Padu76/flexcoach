@@ -1,4 +1,4 @@
-// components/WebcamWithPose.tsx - Con analisi angoli per squat
+// components/WebcamWithPose.tsx - Con voice feedback
 
 'use client'
 
@@ -7,7 +7,9 @@ import { useCamera } from '@/hooks/useCamera'
 import { 
   PlayIcon, 
   StopIcon,
-  CameraIcon
+  CameraIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon
 } from '@heroicons/react/24/outline'
 
 // Dichiarazione tipi MediaPipe
@@ -41,6 +43,18 @@ export default function WebcamWithPose() {
   const [landmarkCount, setLandmarkCount] = useState(0)
   const [frameCount, setFrameCount] = useState(0)
   
+  // Stati per voice feedback
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const [lastVoiceFeedback, setLastVoiceFeedback] = useState('')
+  const lastSpokenRef = useRef<string>('')
+  const lastSpeakTimeRef = useRef<number>(0)
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  
+  // Stati per conteggio reps
+  const [repCount, setRepCount] = useState(0)
+  const [isInRep, setIsInRep] = useState(false)
+  const previousDepthRef = useRef<'alto' | 'parallelo' | 'profondo'>('alto')
+  
   // Stati per gli angoli
   const [angles, setAngles] = useState({
     leftKnee: 0,
@@ -57,6 +71,46 @@ export default function WebcamWithPose() {
   // Hook camera
   const { videoRef, isStreamActive, error: cameraError, startCamera, stopCamera } = useCamera()
 
+  // Inizializza speech synthesis
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      speechUtteranceRef.current = new SpeechSynthesisUtterance()
+      speechUtteranceRef.current.lang = 'it-IT'
+      speechUtteranceRef.current.rate = 1.1
+      speechUtteranceRef.current.pitch = 1.0
+      speechUtteranceRef.current.volume = 0.9
+    }
+  }, [])
+
+  // Funzione per parlare
+  const speak = (text: string, force: boolean = false) => {
+    if (!voiceEnabled || !speechUtteranceRef.current) return
+    
+    const now = Date.now()
+    const timeSinceLastSpeak = now - lastSpeakTimeRef.current
+    
+    // Evita di ripetere lo stesso messaggio troppo spesso (minimo 3 secondi)
+    if (!force && (lastSpokenRef.current === text && timeSinceLastSpeak < 3000)) {
+      return
+    }
+    
+    // Evita sovrapposizioni (minimo 1.5 secondi tra messaggi diversi)
+    if (!force && timeSinceLastSpeak < 1500) {
+      return
+    }
+    
+    // Cancella eventuali speech in corso
+    window.speechSynthesis.cancel()
+    
+    // Parla
+    speechUtteranceRef.current.text = text
+    window.speechSynthesis.speak(speechUtteranceRef.current)
+    
+    lastSpokenRef.current = text
+    lastSpeakTimeRef.current = now
+    setLastVoiceFeedback(text)
+  }
+
   // Funzione per calcolare angolo tra 3 punti
   const calculateAngle = (a: any, b: any, c: any): number => {
     const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x)
@@ -67,6 +121,46 @@ export default function WebcamWithPose() {
     }
     
     return Math.round(angle)
+  }
+
+  // Gestione feedback vocale basato su profondità
+  const handleVoiceFeedback = (depth: 'alto' | 'parallelo' | 'profondo', avgKnee: number) => {
+    // Feedback per profondità
+    if (depth === 'alto' && avgKnee > 150) {
+      speak('Scendi di più')
+    } else if (depth === 'alto' && avgKnee > 120) {
+      speak('Continua a scendere')
+    } else if (depth === 'parallelo' && avgKnee > 100) {
+      speak('Quasi parallelo, ancora un po')
+    } else if (depth === 'parallelo' && avgKnee <= 100) {
+      speak('Perfetto, mantieni')
+    } else if (depth === 'profondo' && avgKnee < 70) {
+      speak('Troppo profondo')
+    }
+    
+    // Conteggio ripetizioni
+    if (previousDepthRef.current === 'alto' && depth === 'profondo') {
+      setIsInRep(true)
+    } else if (previousDepthRef.current === 'profondo' && depth === 'alto' && isInRep) {
+      const newCount = repCount + 1
+      setRepCount(newCount)
+      setIsInRep(false)
+      
+      // Feedback vocale per ripetizione completata
+      if (newCount === 1) {
+        speak('Una ripetizione', true)
+      } else if (newCount === 5) {
+        speak('Cinque ripetizioni, ottimo lavoro', true)
+      } else if (newCount === 10) {
+        speak('Dieci ripetizioni, fantastico', true)
+      } else if (newCount % 5 === 0) {
+        speak(`${newCount} ripetizioni`, true)
+      } else {
+        speak(`${newCount}`, true)
+      }
+    }
+    
+    previousDepthRef.current = depth
   }
 
   // Carica MediaPipe
@@ -168,12 +262,20 @@ export default function WebcamWithPose() {
             })
             
             // Determina profondità squat
+            let newDepth: 'alto' | 'parallelo' | 'profondo' = 'alto'
             if (avgKnee > 160) {
-              setSquatDepth('alto')
+              newDepth = 'alto'
             } else if (avgKnee > 90) {
-              setSquatDepth('parallelo')
+              newDepth = 'parallelo'
             } else {
-              setSquatDepth('profondo')
+              newDepth = 'profondo'
+            }
+            
+            setSquatDepth(newDepth)
+            
+            // Gestisci feedback vocale
+            if (isActive) {
+              handleVoiceFeedback(newDepth, avgKnee)
             }
             
             // Colore delle connessioni basato sulla forma
@@ -239,6 +341,8 @@ export default function WebcamWithPose() {
       if (poseRef.current) {
         poseRef.current.close()
       }
+      // Ferma eventuali speech in corso
+      window.speechSynthesis.cancel()
     }
   }, [])
 
@@ -267,22 +371,15 @@ export default function WebcamWithPose() {
       ctx.fillText(`${rightKnee}°`, x - 50, y)
     }
     
-    // Disegna angolo anca sinistra
-    const leftHipPos = landmarks[POSE_LANDMARKS.LEFT_HIP]
-    if (leftHipPos) {
-      const x = leftHipPos.x * ctx.canvas.width
-      const y = leftHipPos.y * ctx.canvas.height
-      ctx.strokeText(`${leftHip}°`, x + 20, y)
-      ctx.fillText(`${leftHip}°`, x + 20, y)
-    }
-    
-    // Disegna angolo anca destra
-    const rightHipPos = landmarks[POSE_LANDMARKS.RIGHT_HIP]
-    if (rightHipPos) {
-      const x = rightHipPos.x * ctx.canvas.width
-      const y = rightHipPos.y * ctx.canvas.height
-      ctx.strokeText(`${rightHip}°`, x - 50, y)
-      ctx.fillText(`${rightHip}°`, x - 50, y)
+    // Disegna contatore reps al centro in alto
+    if (repCount > 0) {
+      ctx.font = 'bold 48px Arial'
+      ctx.fillStyle = '#FFFF00'
+      const text = `${repCount} REPS`
+      const textWidth = ctx.measureText(text).width
+      const x = (ctx.canvas.width - textWidth) / 2
+      ctx.strokeText(text, x, 60)
+      ctx.fillText(text, x, 60)
     }
   }
 
@@ -310,6 +407,15 @@ export default function WebcamWithPose() {
       await startCamera()
       setIsActive(true)
       setFrameCount(0)
+      setRepCount(0)
+      setIsInRep(false)
+      
+      // Messaggio di benvenuto
+      if (voiceEnabled) {
+        setTimeout(() => {
+          speak('Iniziamo l\'allenamento. Posizionati per lo squat', true)
+        }, 1000)
+      }
       
       if (poseRef.current && videoRef.current) {
         startDetection()
@@ -322,6 +428,12 @@ export default function WebcamWithPose() {
   // Ferma sessione
   const handleStop = () => {
     console.log('🛑 Stop sessione')
+    
+    // Messaggio di fine
+    if (voiceEnabled && repCount > 0) {
+      speak(`Ottimo lavoro! Hai completato ${repCount} ripetizioni`, true)
+    }
+    
     setIsActive(false)
     stopCamera()
     setFrameCount(0)
@@ -335,11 +447,24 @@ export default function WebcamWithPose() {
       avgHip: 0
     })
     
+    // Ferma speech
+    window.speechSynthesis.cancel()
+    
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d')
       if (ctx) {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
       }
+    }
+  }
+
+  // Toggle voice
+  const toggleVoice = () => {
+    setVoiceEnabled(!voiceEnabled)
+    if (!voiceEnabled) {
+      speak('Audio attivato', true)
+    } else {
+      window.speechSynthesis.cancel()
     }
   }
 
@@ -415,17 +540,25 @@ export default function WebcamWithPose() {
             {isActive && (
               <>
                 <span className="text-sm">
-                  Landmarks: <span className="font-mono text-green-400">{landmarkCount}</span>
+                  Reps: <span className="font-mono text-yellow-400 text-lg font-bold">{repCount}</span>
                 </span>
                 <span className="text-sm">
-                  Ginocchio: <span className="font-mono text-yellow-400">{angles.avgKnee}°</span>
-                </span>
-                <span className="text-sm">
-                  Anca: <span className="font-mono text-blue-400">{angles.avgHip}°</span>
+                  Ginocchio: <span className="font-mono text-green-400">{angles.avgKnee}°</span>
                 </span>
               </>
             )}
           </div>
+          <button
+            onClick={toggleVoice}
+            className={`p-2 rounded ${voiceEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} transition-colors`}
+            title={voiceEnabled ? 'Disattiva audio' : 'Attiva audio'}
+          >
+            {voiceEnabled ? (
+              <SpeakerWaveIcon className="w-5 h-5" />
+            ) : (
+              <SpeakerXMarkIcon className="w-5 h-5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -460,9 +593,17 @@ export default function WebcamWithPose() {
             <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg">
               <span className="flex items-center">
                 <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                Analisi Angoli Attiva
+                AI Coach Attivo
               </span>
             </div>
+            
+            {/* Counter Reps grande */}
+            {repCount > 0 && (
+              <div className="absolute top-4 right-4 bg-black/70 text-yellow-400 px-4 py-2 rounded-lg">
+                <div className="text-3xl font-bold">{repCount}</div>
+                <div className="text-xs text-center">REPS</div>
+              </div>
+            )}
             
             {/* Feedback profondità in tempo reale */}
             {landmarkCount > 0 && (
@@ -485,7 +626,7 @@ export default function WebcamWithPose() {
             className="btn-primary btn-lg inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <PlayIcon className="w-5 h-5 mr-2" />
-            {isMediaPipeReady ? 'Inizia Analisi Squat' : 'Caricamento MediaPipe...'}
+            {isMediaPipeReady ? 'Inizia Allenamento' : 'Caricamento MediaPipe...'}
           </button>
         ) : (
           <button
@@ -493,69 +634,71 @@ export default function WebcamWithPose() {
             className="btn bg-red-600 hover:bg-red-700 text-white btn-lg inline-flex items-center"
           >
             <StopIcon className="w-5 h-5 mr-2" />
-            Ferma Analisi
+            Ferma Allenamento
           </button>
         )}
       </div>
 
-      {/* Pannello Angoli */}
-      {isActive && landmarkCount > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Ginocchio SX</h3>
-            <p className="text-2xl font-bold text-primary-600">{angles.leftKnee}°</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Ginocchio DX</h3>
-            <p className="text-2xl font-bold text-primary-600">{angles.rightKnee}°</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Anca SX</h3>
-            <p className="text-2xl font-bold text-blue-600">{angles.leftHip}°</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Anca DX</h3>
-            <p className="text-2xl font-bold text-blue-600">{angles.rightHip}°</p>
+      {/* Voice Feedback Display */}
+      {voiceEnabled && lastVoiceFeedback && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <SpeakerWaveIcon className="w-5 h-5 text-purple-600" />
+            <span className="text-purple-800 font-medium">Coach Vocale:</span>
+            <span className="text-purple-600 italic">"{lastVoiceFeedback}"</span>
           </div>
         </div>
       )}
 
-      {/* Info Squat Depth */}
+      {/* Pannello Statistiche */}
       {isActive && landmarkCount > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-semibold text-blue-900 mb-2">📐 Analisi Profondità Squat</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Angolo medio ginocchia:</span>
-              <span className="font-mono font-bold">{angles.avgKnee}°</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Angolo medio anche:</span>
-              <span className="font-mono font-bold">{angles.avgHip}°</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Profondità:</span>
-              <span className={`font-bold px-2 py-1 rounded ${getDepthColor()}`}>
-                {squatDepth.toUpperCase()}
-              </span>
-            </div>
-            <div className="mt-3 pt-3 border-t border-blue-200">
-              <p className="text-xs text-blue-700">
-                🎯 Target: Angolo ginocchio 90° (parallelo) o meno per squat completo
-              </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">Ripetizioni</h3>
+            <p className="text-3xl font-bold text-yellow-600">{repCount}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">Angolo Medio</h3>
+            <p className="text-2xl font-bold text-primary-600">{angles.avgKnee}°</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">Profondità</h3>
+            <p className={`text-lg font-bold px-2 py-1 rounded ${getDepthColor()}`}>
+              {squatDepth.toUpperCase()}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">Audio</h3>
+            <div className="flex items-center justify-center h-8">
+              {voiceEnabled ? (
+                <span className="text-green-600 font-bold">ATTIVO</span>
+              ) : (
+                <span className="text-gray-400">MUTO</span>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-semibold text-blue-900 mb-2">🎯 AI Coach Features</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-700">
+          <div>✅ Analisi angoli in tempo reale</div>
+          <div>🔊 Feedback vocale italiano</div>
+          <div>🔢 Conteggio automatico ripetizioni</div>
+          <div>📐 Target: 90° per squat parallelo</div>
+        </div>
+      </div>
 
       {/* Debug Info */}
       <div className="bg-gray-100 rounded-lg p-4">
         <h4 className="font-semibold text-sm mb-2">🔍 Debug Info:</h4>
         <div className="text-xs space-y-1 font-mono">
-          <div>MediaPipe Ready: {isMediaPipeReady ? '✅' : '⏳'}</div>
-          <div>Detection Active: {isActive ? '✅' : '❌'}</div>
-          <div>Pose Landmarks: {landmarkCount}/33</div>
+          <div>Voice Enabled: {voiceEnabled ? '✅' : '❌'}</div>
+          <div>Reps Count: {repCount}</div>
           <div>Squat Depth: {squatDepth}</div>
+          <div>In Rep: {isInRep ? 'YES' : 'NO'}</div>
           {cameraError && <div className="text-red-600">Error: {cameraError}</div>}
         </div>
       </div>
