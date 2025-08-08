@@ -839,38 +839,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               🛡️ Protezione Attiva
             </div>
           )}
-        </div>
-        
-        {/* Posture Issues Overlay - Solo quando ci sono problemi */}
-        {isRunning && currentPostureIssues.length > 0 && showSkeleton && (
-          <div className="absolute top-4 right-4 z-20 bg-black/70 text-white p-3 rounded-lg max-w-xs">
-            <div className="text-xs font-bold mb-2">Problemi Rilevati:</div>
-            {currentPostureIssues.map((issue, idx) => (
-              <div key={idx} className="text-xs mb-1">
-                ⚠️ {issue.bodyPart}: {issue.message}
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {/* Camera/Video */}
-        <Webcam
-          ref={webcamRef}
-          className="w-full h-auto"
-          mirrored
-          screenshotFormat="image/jpeg"
-        />
-        
-        {/* Placeholder for pose detection */}
-        {!isRunning && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="text-white text-center">
-              <CameraIcon className="w-12 h-12 mx-auto mb-2" />
-              <p>Premi "Inizia Allenamento" per attivare</p>
+          
+          {modelReady && !poseLoading && (
+            <div className="bg-purple-500 text-white px-3 py-1 rounded-full text-sm">
+              🤖 AI Tracking ON
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       
       {/* Control Buttons */}
       <div className="flex gap-3 justify-center">
