@@ -21,7 +21,7 @@ import Webcam from 'react-webcam'
 
 export default function UserProfileSystem() {
   // DataManager Hooks
-  const { profile, updateProfile, deleteProfile, hasProfile } = useUserProfile()
+  const { profile, updateProfile, hasProfile } = useUserProfile()
   const { calibration, updateCalibration, resetCalibration, isCalibrated } = useCalibration()
   const { exportData, importData } = useDataManager()
   
@@ -66,21 +66,23 @@ export default function UserProfileSystem() {
     setEditMode(false)
   }
   
-  // Cancella profilo
+  // Cancella profilo (reset)
   const handleDeleteProfile = () => {
     if (window.confirm('Sei sicuro di voler eliminare il profilo? Questa azione non può essere annullata.')) {
-      deleteProfile()
-      setTempProfile({
+      // Reset profilo a valori vuoti
+      const emptyProfile = {
         name: '',
         age: 0,
         weight: 0,
         height: 0,
-        experienceLevel: 'beginner',
+        experienceLevel: 'beginner' as const,
         injuries: [],
         goals: [],
         trainingDays: 3,
-        trainingGoal: 'general'
-      })
+        trainingGoal: 'general' as const
+      }
+      updateProfile(emptyProfile)
+      setTempProfile(emptyProfile)
       setEditMode(false)
     }
   }
