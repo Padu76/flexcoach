@@ -19,6 +19,7 @@ import {
   Bars3Icon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import type { ExerciseType } from '@/types'
 
 // Import componenti (se esistono)
 import dynamic from 'next/dynamic'
@@ -47,6 +48,7 @@ const WeightPredictionSystem = dynamic(() => import('@/components/WeightPredicti
 export default function DashboardPage() {
   const [activeSection, setActiveSection] = useState('overview')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('squat')
   const [userData, setUserData] = useState({
     name: 'Atleta',
     workoutsThisWeek: 3,
@@ -76,26 +78,90 @@ export default function DashboardPage() {
     { id: 'settings', name: 'Impostazioni', icon: CogIcon },
   ]
 
+  const exercises = [
+    { value: 'squat', label: 'Squat', icon: '🏋️' },
+    { value: 'bench-press', label: 'Panca Piana', icon: '💪' },
+    { value: 'deadlift', label: 'Stacco da Terra', icon: '⚡' }
+  ]
+
   const renderContent = () => {
     switch(activeSection) {
       case 'profile':
         return <UserProfileSystem />
       
       case 'performance':
-        return <PerformanceDashboard />
+        return (
+          <div className="space-y-4">
+            {/* Exercise Selector for Performance */}
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Seleziona Esercizio da Analizzare
+              </label>
+              <div className="flex gap-2">
+                {exercises.map(exercise => (
+                  <button
+                    key={exercise.value}
+                    onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      selectedExercise === exercise.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>{exercise.icon}</span>
+                    <span>{exercise.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <PerformanceDashboard exerciseType={selectedExercise} />
+          </div>
+        )
       
       case 'injury-prevention':
         return <InjuryPreventionSystem />
       
       case 'weight-calculator':
-        return <WeightPredictionSystem />
+        return (
+          <div className="space-y-4">
+            {/* Exercise Selector for Weight Calculator */}
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Calcola Peso Ottimale per:
+              </label>
+              <div className="flex gap-2">
+                {exercises.map(exercise => (
+                  <button
+                    key={exercise.value}
+                    onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      selectedExercise === exercise.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>{exercise.icon}</span>
+                    <span>{exercise.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <WeightPredictionSystem 
+              exerciseType={selectedExercise}
+              onStartWorkout={(plan, weight) => {
+                // Naviga alla pagina esercizio con parametri
+                window.location.href = `/exercises/${selectedExercise}?weight=${weight}&reps=${plan.targetReps}&sets=${plan.targetSets}`
+              }}
+            />
+          </div>
+        )
       
       case 'settings':
         return <SettingsSection />
       
       case 'overview':
       default:
-        return <OverviewSection userData={userData} />
+        return <OverviewSection userData={userData} selectedExercise={selectedExercise} setSelectedExercise={setSelectedExercise} />
     }
   }
 
@@ -245,10 +311,13 @@ export default function DashboardPage() {
                 Azioni Rapide
               </h3>
               <div className="space-y-2">
-                <button className="w-full flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <Link 
+                  href="/exercises"
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
                   <SparklesIcon className="w-5 h-5" />
                   <span className="text-sm font-medium">Nuovo Allenamento</span>
-                </button>
+                </Link>
                 <button className="w-full flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
                   <DocumentArrowDownIcon className="w-5 h-5" />
                   <span className="text-sm font-medium">Esporta Dati</span>
@@ -290,7 +359,21 @@ export default function DashboardPage() {
 }
 
 // Componente Overview
-function OverviewSection({ userData }: { userData: any }) {
+function OverviewSection({ 
+  userData, 
+  selectedExercise, 
+  setSelectedExercise 
+}: { 
+  userData: any, 
+  selectedExercise: ExerciseType,
+  setSelectedExercise: (exercise: ExerciseType) => void
+}) {
+  const exercises = [
+    { value: 'squat', label: 'Squat', icon: '🏋️' },
+    { value: 'bench-press', label: 'Panca Piana', icon: '💪' },
+    { value: 'deadlift', label: 'Stacco da Terra', icon: '⚡' }
+  ]
+
   return (
     <>
       <div className="mb-6">
@@ -343,17 +426,41 @@ function OverviewSection({ userData }: { userData: any }) {
         </div>
       </div>
 
-      {/* Quick Start */}
+      {/* Quick Start with Exercise Selector */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white mb-8">
         <h2 className="text-2xl font-bold mb-2">Pronto per allenarti?</h2>
         <p className="mb-4 opacity-90">
           Il tuo ultimo allenamento è stato {userData.lastWorkout}. Continuiamo il momentum!
         </p>
+        
+        {/* Exercise Selector */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-white/80 mb-2">
+            Scegli l'esercizio:
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            {exercises.map(exercise => (
+              <button
+                key={exercise.value}
+                onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedExercise === exercise.value
+                    ? 'bg-white text-blue-600 scale-105'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                <span>{exercise.icon}</span>
+                <span>{exercise.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        
         <Link 
-          href="/exercises" 
+          href={`/exercises/${selectedExercise}`}
           className="inline-flex items-center gap-2 bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
         >
-          Inizia Allenamento
+          Inizia {exercises.find(e => e.value === selectedExercise)?.label}
           <SparklesIcon className="w-5 h-5" />
         </Link>
       </div>
