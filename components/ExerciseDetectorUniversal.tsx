@@ -138,7 +138,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           volume: sessionVolume 
         })
         
-        const result = endWorkout(totalRepsSession.current, sessionVolume)
+        const result = endWorkout()
         
         if (result.success) {
           console.log('Workout ended successfully')
@@ -164,7 +164,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           volume: sessionVolume 
         })
         
-        const result = endWorkout(totalRepsSession.current, sessionVolume)
+        const result = endWorkout()
         
         if (result.success) {
           console.log('Workout saved successfully')
