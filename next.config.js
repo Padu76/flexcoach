@@ -1,5 +1,3 @@
-const { withSentryConfig } = require('@sentry/nextjs');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -29,70 +27,31 @@ const nextConfig = {
             value: 'nosniff',
           },
           {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
-          },
-          // Permessi per webcam e audio
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(*), microphone=(*)',
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
           },
         ],
       },
-    ];
+    ]
   },
   
-  // Webpack config per TensorFlow e MediaPipe
+  // Redirects se necessari
+  async redirects() {
+    return []
+  },
+  
+  // Webpack config per ottimizzazioni
   webpack: (config, { isServer }) => {
-    // Fix per TensorFlow.js
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        crypto: false,
-      };
+    // Ignora warning per moduli opzionali
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
     }
     
-    return config;
+    return config
   },
-};
+}
 
-// Configurazione Sentry
-module.exports = withSentryConfig(
-  nextConfig,
-  {
-    // Configurazione organizzazione Sentry
-    org: "padu76-9j",
-    project: "flexcoach-monitoring",
-    
-    // Auth token per upload source maps (viene da env)
-    authToken: process.env.SENTRY_AUTH_TOKEN,
-    
-    // Opzioni generali
-    silent: true, // Non mostrare log Sentry durante build
-    
-    // Source maps
-    widenClientFileUpload: true,
-    hideSourceMaps: true, // Nasconde source maps in produzione
-    disableLogger: true, // Disabilita Sentry logger in produzione
-    
-    // Tunneling per evitare ad-blockers
-    tunnelRoute: "/monitoring",
-    
-    // Auto-instrumentazione
-    autoInstrumentServerFunctions: true,
-    autoInstrumentMiddleware: true,
-  },
-  {
-    // Upload options
-    transpileClientSDK: true,
-    
-    // Tree shaking
-    disableServerWebpackPlugin: false,
-    disableClientWebpackPlugin: false,
-    
-    // Release tracking
-    automaticVercelMonitors: true,
-  }
-);
+module.exports = nextConfig
