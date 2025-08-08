@@ -1,9 +1,10 @@
-// components/ExerciseDetectorUniversal.tsx - CON SISTEMA ALERT INFORTUNI REAL-TIME
+// components/ExerciseDetectorUniversal.tsx - CON TRACKING REALE POSENET
 
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useSoundFeedback } from '@/hooks/useSoundFeedback'
+import { usePoseNetDetection } from '@/hooks/usePoseNetDetection'
 import { 
   useCurrentWorkout, 
   useExercisePreferences,
@@ -28,7 +29,6 @@ import {
   ShieldExclamationIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline'
-import Webcam from 'react-webcam'
 import type { ExerciseType } from '@/types'
 
 interface Props {
@@ -122,7 +122,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [wasAutoPaused, setWasAutoPaused] = useState(false)
   
   // Refs
-  const webcamRef = useRef<Webcam>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const sessionStarted = useRef(false)
   const totalRepsSession = useRef(0)
   const perfectRepsCount = useRef(0)
@@ -135,418 +136,129 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     sounds
   } = useSoundFeedback()
   
-  // SISTEMA DI RILEVAMENTO MOVIMENTO E COUNTER AUTOMATICO
-  const detectMovementPhase = useCallback(() => {
-    if (!isRunning || isPaused) return
-    
-    // SIMULAZIONE posizione attuale (0=top, 100=bottom)
-    // In produzione qui ci sarebbe il vero tracking ML della posizione
-    const simulatePosition = () => {
-      const time = Date.now() / 1000
-      const cycleTime = 3 // 3 secondi per rep completa
-      const phase = (time % cycleTime) / cycleTime
+  // POSENET TRACKING REALE
+  const {
+    setupVideoElement,
+    setupCanvasElement,
+    startTracking: startPoseTracking,
+    stopTracking: stopPoseTracking,
+    resetTracking: resetPoseTracking,
+    isLoading: poseLoading,
+    isTracking: poseTracking,
+    modelReady,
+    repCount: poseRepCount,
+    currentPhase: posePhase,
+    currentAngles,
+    currentMetrics,
+    formAnalysis: poseFormAnalysis
+  } = usePoseNetDetection({
+    exerciseType,
+    minConfidence: 0.3,
+    onRepComplete: (rep) => {
+      console.log('Rep completata:', rep)
       
-      // Simula movimento sinusoidale con variazione realistica
-      let position = Math.sin(phase * Math.PI * 2) * 50 + 50
+      // Aggiorna contatori basati su qualità
+      totalRepsSession.current++
+      setRepsCount(poseRepCount)
+      setCurrentSetCount(prev => prev + 1)
       
-      // Aggiungi rumore per realismo
-      position += (Math.random() - 0.5) * 5
-      
-      // Clamp tra 0 e 100
-      return Math.max(0, Math.min(100, position))
-    }
-    
-    const newPosition = simulatePosition()
-    const velocity = newPosition - lastPosition
-    
-    // Aggiungi a velocity tracking per analisi
-    setVelocityTracking(prev => [...prev.slice(-10), velocity])
-    
-    // Threshold per determinare le fasi (personalizzati per esercizio)
-    const getThresholds = () => {
-      switch (exerciseType) {
-        case 'squat':
-          return { bottom: 75, top: 25, minRange: 40 }
-        case 'bench-press':
-          return { bottom: 80, top: 20, minRange: 50 }
-        case 'deadlift':
-          return { bottom: 85, top: 15, minRange: 60 }
-        default:
-          return { bottom: 75, top: 25, minRange: 40 }
-      }
-    }
-    
-    const thresholds = getThresholds()
-    
-    // State machine per rilevamento fasi
-    switch (movementPhase) {
-      case 'ready':
-        // Aspetta che inizi a scendere
-        if (newPosition > lastPosition + 2 && newPosition > thresholds.top) {
-          setMovementPhase('descending')
-          setCurrentRepStartTime(Date.now())
-        }
-        break
-        
-      case 'descending':
-        // Controlla se ha raggiunto il bottom
-        if (newPosition >= thresholds.bottom) {
-          setMovementPhase('bottom')
-          
-          // Valuta profondità
-          if (newPosition >= thresholds.bottom + 10) {
-            // Troppo profondo
-            if (audioEnabled) playBeep(200, 200) // Tono basso warning
-          } else if (newPosition >= thresholds.bottom) {
-            // Profondità perfetta
-            if (audioEnabled) playBeep(600, 100) // Tono positivo
-          }
-        } else if (velocity < -5) {
-          // Sta scendendo troppo veloce
-          setIsInProperForm(false)
-        }
-        break
-        
-      case 'bottom':
-        // Aspetta che inizi a risalire
-        if (newPosition < lastPosition - 2) {
-          setMovementPhase('ascending')
-        }
-        break
-        
-      case 'ascending':
-        // Controlla se ha completato la rep
-        if (newPosition <= thresholds.top) {
-          setMovementPhase('top')
-          
-          // REP COMPLETATA! Calcola qualità
-          const duration = Date.now() - currentRepStartTime
-          const avgVelocity = velocityTracking.reduce((a, b) => Math.abs(a) + Math.abs(b), 0) / velocityTracking.length
-          
-          // Determina qualità basata su criteri multipli
-          let quality: 'perfect' | 'good' | 'fair' | 'poor' = 'good'
-          
-          if (duration < 1500) {
-            // Troppo veloce
-            quality = 'poor'
-          } else if (duration > 6000) {
-            // Troppo lenta
-            quality = 'fair'
-          } else if (isInProperForm && postureScore >= 90) {
-            quality = 'perfect'
-          } else if (isInProperForm && postureScore >= 70) {
-            quality = 'good'
-          } else if (postureScore >= 50) {
-            quality = 'fair'
-          } else {
-            quality = 'poor'
-          }
-          
-          // Aggiorna counter e stats
-          completeRep(quality, duration)
-        }
-        break
-        
-      case 'top':
-        // Reset per prossima rep
-        setTimeout(() => {
-          setMovementPhase('ready')
-          setIsInProperForm(true)
-          setVelocityTracking([])
-        }, 500) // Breve pausa in cima
-        break
-    }
-    
-    // Aggiorna posizioni
-    setLastPosition(currentPosition)
-    setCurrentPosition(newPosition)
-    
-  }, [isRunning, isPaused, movementPhase, lastPosition, currentPosition, exerciseType, audioEnabled, playBeep, velocityTracking, isInProperForm, postureScore, currentRepStartTime])
-  
-  // Funzione per completare una rep
-  const completeRep = useCallback((quality: 'perfect' | 'good' | 'fair' | 'poor', duration: number) => {
-    // Incrementa contatori
-    setRepsCount(prev => prev + 1)
-    setCurrentSetCount(prev => prev + 1)
-    totalRepsSession.current++
-    
-    // Aggiorna stats per qualità
-    switch (quality) {
-      case 'perfect':
-        setPerfectReps(prev => prev + 1)
-        perfectRepsCount.current++
-        break
-      case 'good':
-        setGoodReps(prev => prev + 1)
-        break
-      case 'fair':
-        setFairReps(prev => prev + 1)
-        break
-      case 'poor':
-        setPoorReps(prev => prev + 1)
-        break
-    }
-    
-    // Aggiorna volume
-    const currentVolume = currentWeight * (repsCount + 1)
-    setSessionVolume(currentVolume)
-    
-    // Audio feedback basato su qualità
-    if (audioEnabled) {
-      switch (quality) {
+      switch (rep.quality) {
         case 'perfect':
-          if (sounds?.perfetto) sounds.perfetto()
+          setPerfectReps(prev => prev + 1)
+          perfectRepsCount.current++
+          if (audioEnabled && sounds?.perfetto) sounds.perfetto()
           break
         case 'good':
-          playBeep(800, 100)
+          setGoodReps(prev => prev + 1)
+          if (audioEnabled) playBeep(800, 100)
           break
         case 'fair':
-          playBeep(500, 150)
+          setFairReps(prev => prev + 1)
+          if (audioEnabled) playBeep(500, 150)
           break
         case 'poor':
-          playBeep(300, 200)
+          setPoorReps(prev => prev + 1)
+          if (audioEnabled) playBeep(300, 200)
           break
       }
+      
+      // Aggiorna volume
+      const currentVolume = currentWeight * poseRepCount
+      setSessionVolume(currentVolume)
+      
+      // Milestone audio
+      if (poseRepCount % 5 === 0 && audioEnabled && sounds?.cinqueReps) {
+        setTimeout(() => sounds.cinqueReps(), 500)
+      }
+      if (poseRepCount % 10 === 0 && audioEnabled && sounds?.dieciReps) {
+        setTimeout(() => sounds.dieciReps(), 500)
+      }
+    },
+    onPhaseChange: (phase) => {
+      console.log('Cambio fase:', phase)
+      setMovementPhase(phase.phase === 'descending' ? 'descending' :
+                       phase.phase === 'bottom' ? 'bottom' :
+                       phase.phase === 'ascending' ? 'ascending' :
+                       phase.phase === 'top' ? 'top' : 'ready')
     }
-    
-    // Milestone audio
-    const totalReps = repsCount + 1
-    if (totalReps % 5 === 0 && audioEnabled && sounds?.cinqueReps) {
-      setTimeout(() => sounds.cinqueReps(), 500)
-    }
-    if (totalReps % 10 === 0 && audioEnabled && sounds?.dieciReps) {
-      setTimeout(() => sounds.dieciReps(), 500)
-    }
-    
-    // Log per debug
-    console.log(`Rep ${totalReps} completata:`, {
-      quality,
-      duration: `${(duration / 1000).toFixed(1)}s`,
-      postureScore,
-      volume: currentVolume
-    })
-    
-    setRepQuality(quality)
-    setRepDuration(duration)
-  }, [repsCount, currentWeight, audioEnabled, sounds, playBeep, postureScore])
+  })
   
-  // Esegui tracking movimento ogni 100ms quando attivo
+  // Sincronizza rep count da PoseNet
   useEffect(() => {
-    if (!isRunning || isPaused) return
-    
-    const interval = setInterval(detectMovementPhase, 100)
-    return () => clearInterval(interval)
-  }, [isRunning, isPaused, detectMovementPhase])
+    setRepsCount(poseRepCount)
+  }, [poseRepCount])
   
-  // FUNZIONI PER RILEVAMENTO POSTURA E ALERT
-  const analyzePosture = useCallback(() => {
-    if (!isRunning || isPaused || !injuryAlertsEnabled) return
-    
-    // SIMULAZIONE analisi postura - In produzione qui ci sarebbe il vero ML
-    const issues: PostureIssue[] = []
-    let totalSeverity = 0
-    
-    // Simula rilevamento problemi basato su probabilità
-    const random = Math.random()
-    
-    // Simula problemi comuni per ogni esercizio
-    if (exerciseType === 'squat') {
-      // Ginocchia che cedono verso l'interno
-      if (random < 0.15) {
-        issues.push({
-          type: 'knee_valgus',
-          severity: 60 + Math.random() * 40,
-          bodyPart: 'ginocchia',
-          message: 'Ginocchia che cedono verso l\'interno',
-          recommendation: 'Spingi le ginocchia verso l\'esterno'
-        })
-      }
-      // Schiena curva
-      if (random < 0.1) {
-        issues.push({
-          type: 'back_rounding',
-          severity: 70 + Math.random() * 30,
-          bodyPart: 'schiena',
-          message: 'Schiena troppo curva',
-          recommendation: 'Mantieni il petto in fuori e la schiena dritta'
-        })
-      }
-      // Profondità insufficiente
-      if (random < 0.2) {
-        issues.push({
-          type: 'depth',
-          severity: 30 + Math.random() * 30,
-          bodyPart: 'anche',
-          message: 'Profondità insufficiente',
-          recommendation: 'Scendi fino a che le anche sono sotto le ginocchia'
-        })
-      }
-    } else if (exerciseType === 'bench-press') {
-      // Gomiti troppo aperti
-      if (random < 0.15) {
-        issues.push({
-          type: 'elbow_flare',
-          severity: 50 + Math.random() * 30,
-          bodyPart: 'gomiti',
-          message: 'Gomiti troppo aperti',
-          recommendation: 'Mantieni i gomiti a 45° dal corpo'
-        })
-      }
-      // Arco eccessivo della schiena
-      if (random < 0.1) {
-        issues.push({
-          type: 'excessive_arch',
-          severity: 60 + Math.random() * 40,
-          bodyPart: 'schiena',
-          message: 'Arco lombare eccessivo',
-          recommendation: 'Riduci l\'arco della schiena'
-        })
-      }
-      // Polsi piegati
-      if (random < 0.12) {
-        issues.push({
-          type: 'wrist_bend',
-          severity: 40 + Math.random() * 40,
-          bodyPart: 'polsi',
-          message: 'Polsi troppo piegati',
-          recommendation: 'Mantieni i polsi dritti e allineati'
-        })
-      }
-    } else if (exerciseType === 'deadlift') {
-      // Schiena arrotondata
-      if (random < 0.15) {
-        issues.push({
-          type: 'back_rounding',
-          severity: 80 + Math.random() * 20,
-          bodyPart: 'schiena',
-          message: 'Schiena arrotondata pericolosamente',
-          recommendation: 'FERMATI! Mantieni la schiena neutra'
-        })
-      }
-      // Bilanciere troppo lontano
-      if (random < 0.2) {
-        issues.push({
-          type: 'bar_path',
-          severity: 40 + Math.random() * 30,
-          bodyPart: 'schiena',
-          message: 'Bilanciere troppo lontano dal corpo',
-          recommendation: 'Tieni il bilanciere vicino al corpo'
-        })
-      }
-      // Iperestensione
-      if (random < 0.1) {
-        issues.push({
-          type: 'hyperextension',
-          severity: 70 + Math.random() * 30,
-          bodyPart: 'schiena',
-          message: 'Iperestensione in alto',
-          recommendation: 'Non inarcare troppo la schiena in cima'
-        })
-      }
-    }
-    
-    // Calcola severity totale
-    if (issues.length > 0) {
-      totalSeverity = Math.max(...issues.map(i => i.severity))
-    }
-    
-    // Aggiorna posture score
-    const newPostureScore = Math.max(0, 100 - totalSeverity)
-    setPostureScore(newPostureScore)
-    setCurrentPostureIssues(issues)
-    
-    // Determina livello di alert
-    let alertLevel: AlertLevel = 'safe'
-    let alertMessage = ''
-    let shouldAutoPause = false
-    
-    if (totalSeverity >= 80) {
-      alertLevel = 'danger'
-      alertMessage = `PERICOLO: ${issues[0].message}`
-      setConsecutiveDangerFrames(prev => prev + 1)
-      
-      // Auto-pausa dopo 3 frame consecutivi di pericolo
-      if (consecutiveDangerFrames >= 3) {
-        shouldAutoPause = true
-      }
-      
-      // Suono di pericolo
-      if (audioEnabled && !dangerSoundPlayedRef.current) {
-        // Simula suono di alert
-        playBeep()
-        playBeep()
-        playBeep()
-        dangerSoundPlayedRef.current = true
-      }
-    } else if (totalSeverity >= 50) {
-      alertLevel = 'warning'
-      alertMessage = `Attenzione: ${issues[0].message}`
-      setConsecutiveDangerFrames(0)
-      dangerSoundPlayedRef.current = false
-      
-      // Suono di warning
-      if (audioEnabled && Math.random() < 0.3) {
-        playBeep()
-      }
-    } else {
-      setConsecutiveDangerFrames(0)
-      dangerSoundPlayedRef.current = false
-    }
-    
-    // Crea alert se necessario
-    if (alertLevel !== 'safe' && issues.length > 0) {
-      const alert: InjuryAlert = {
-        level: alertLevel,
-        message: alertMessage,
-        bodyPart: issues[0].bodyPart,
-        timestamp: Date.now(),
-        autopaused: shouldAutoPause
-      }
-      
-      setCurrentAlert(alert)
-      setAlertHistory(prev => [...prev, alert])
-      
-      // Auto-rimuovi alert dopo 3 secondi se non è danger
-      if (alertLevel === 'warning') {
-        if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current)
-        alertTimeoutRef.current = setTimeout(() => {
-          setCurrentAlert(null)
-        }, 3000)
-      }
-      
-      // Auto-pausa se necessario
-      if (shouldAutoPause && !wasAutoPaused) {
-        setIsPaused(true)
-        setWasAutoPaused(true)
-        console.log('AUTO-PAUSA ATTIVATA PER SICUREZZA!')
-      }
-    } else {
-      // Rimuovi alert se tutto ok
-      if (currentAlert && alertLevel === 'safe') {
-        setCurrentAlert(null)
-      }
-      setWasAutoPaused(false)
-    }
-    
-    // Aggiorna qualità forma basata su posture score
-    setFormQuality(newPostureScore)
-  }, [isRunning, isPaused, injuryAlertsEnabled, exerciseType, audioEnabled, consecutiveDangerFrames, currentAlert, wasAutoPaused, playBeep])
-  
-  // Analizza postura ogni 500ms quando attivo
+  // Aggiorna posture score da form analysis
   useEffect(() => {
-    if (!isRunning || isPaused) return
-    
-    const interval = setInterval(analyzePosture, 500)
-    return () => clearInterval(interval)
-  }, [isRunning, isPaused, analyzePosture])
-  
-  // Reset danger frames quando si mette in pausa
-  useEffect(() => {
-    if (isPaused) {
-      setConsecutiveDangerFrames(0)
-      dangerSoundPlayedRef.current = false
+    if (poseFormAnalysis) {
+      setPostureScore(poseFormAnalysis.score)
+      setFormQuality(poseFormAnalysis.score)
+      
+      // Converti issues in formato alert
+      if (poseFormAnalysis.issues.length > 0 && injuryAlertsEnabled) {
+        const severity = poseFormAnalysis.score < 50 ? 'danger' :
+                        poseFormAnalysis.score < 70 ? 'warning' : 'safe'
+        
+        if (severity !== 'safe') {
+          const alert: InjuryAlert = {
+            level: severity as AlertLevel,
+            message: poseFormAnalysis.issues[0],
+            bodyPart: 'forma',
+            timestamp: Date.now()
+          }
+          setCurrentAlert(alert)
+          setAlertHistory(prev => [...prev, alert])
+          
+          // Audio alert
+          if (audioEnabled && severity === 'danger' && !dangerSoundPlayedRef.current) {
+            playBeep(800, 200)
+            playBeep(800, 200)
+            playBeep(800, 200)
+            dangerSoundPlayedRef.current = true
+          }
+        }
+      }
     }
-  }, [isPaused])
+  }, [poseFormAnalysis, injuryAlertsEnabled, audioEnabled, playBeep])
+  
+  // Aggiorna metriche da PoseNet
+  useEffect(() => {
+    if (currentMetrics) {
+      setCurrentPosition(currentMetrics.depth)
+      // Velocity tracking per stability
+      setVelocityTracking(prev => [...prev.slice(-10), currentMetrics.velocity])
+    }
+  }, [currentMetrics])
+  
+  // Setup video e canvas quando il componente monta
+  useEffect(() => {
+    if (videoRef.current) {
+      setupVideoElement(videoRef.current)
+    }
+    if (canvasRef.current) {
+      setupCanvasElement(canvasRef.current)
+    }
+  }, [])
   
   // Inizializza workout quando si avvia
   useEffect(() => {
@@ -613,11 +325,14 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }, [sessionVolume, alertHistory, endWorkout])
   
   // Handler per start/stop
-  const handleStartStop = () => {
+  const handleStartStop = async () => {
     if (isRunning) {
       console.log('Stopping workout')
       setIsRunning(false)
       setIsPaused(false)
+      
+      // Stop tracking reale
+      stopPoseTracking()
       
       // Salva sessione finale
       if (sessionStarted.current && totalRepsSession.current > 0) {
@@ -662,10 +377,15 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setIsInProperForm(true)
       setRepQuality('good')
       setRepDuration(0)
+      resetPoseTracking()
     } else {
       console.log('Starting workout')
       setIsRunning(true)
       setIsPaused(false)
+      
+      // Start tracking reale
+      await startPoseTracking()
+      
       if (audioEnabled && sounds?.start) sounds.start()
     }
   }
@@ -674,8 +394,16 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     if (isPaused) {
       setIsPaused(false)
       setWasAutoPaused(false) // Reset auto-pause flag quando riprende manualmente
+      // Resume tracking se era in pausa
+      if (isRunning && !poseTracking) {
+        startPoseTracking()
+      }
     } else {
       setIsPaused(true)
+      // Pausa tracking
+      if (poseTracking) {
+        stopPoseTracking()
+      }
     }
   }
   
@@ -1014,7 +742,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       {/* Stats Panel */}
       {showMetrics && isRunning && <StatsPanel />}
       
-      {/* Video Container */}
+      {/* Video Container con Tracking Reale */}
       <div className="relative bg-black rounded-lg overflow-hidden mb-4">
         {/* Status Badges */}
         <div className="absolute top-4 left-4 z-20 space-y-2">
@@ -1032,6 +760,76 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           
           {wasAutoPaused && (
             <div className="bg-red-500 text-white px-3 py-1 rounded-full text-sm animate-bounce">
+              AUTO-PAUSA SICUREZZA
+            </div>
+          )}
+          
+          {injuryAlertsEnabled && isRunning && (
+            <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
+              🛡️ Protezione Attiva
+            </div>
+          )}
+          
+          {modelReady && !poseLoading && (
+            <div className="bg-purple-500 text-white px-3 py-1 rounded-full text-sm">
+              🤖 AI Tracking ON
+            </div>
+          )}
+        </div>
+        
+        {/* Loading Indicator */}
+        {poseLoading && (
+          <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30">
+            <div className="text-white text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+              <p>Caricamento AI Tracking...</p>
+              <p className="text-sm text-gray-300 mt-2">Attendi qualche secondo</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Posture Issues Overlay - Solo quando ci sono problemi */}
+        {isRunning && currentPostureIssues.length > 0 && showSkeleton && (
+          <div className="absolute top-4 right-4 z-20 bg-black/70 text-white p-3 rounded-lg max-w-xs">
+            <div className="text-xs font-bold mb-2">Problemi Rilevati:</div>
+            {currentPostureIssues.map((issue, idx) => (
+              <div key={idx} className="text-xs mb-1">
+                ⚠️ {issue.bodyPart}: {issue.message}
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Video nascosto (solo per capture) */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="hidden"
+          width={640}
+          height={480}
+        />
+        
+        {/* Canvas con tracking visibile */}
+        <canvas
+          ref={canvasRef}
+          className="w-full h-auto"
+          width={640}
+          height={480}
+        />
+        
+        {/* Placeholder quando non attivo */}
+        {!isRunning && !poseTracking && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <div className="text-white text-center">
+              <CameraIcon className="w-12 h-12 mx-auto mb-2" />
+              <p>Premi "Inizia Allenamento" per attivare</p>
+              <p className="text-sm text-gray-300 mt-2">Il tracking AI rileverà automaticamente i tuoi movimenti</p>
+            </div>
+          </div>
+        )}
+      </div>bounce">
               AUTO-PAUSA SICUREZZA
             </div>
           )}
@@ -1245,6 +1043,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           <div>Alert Count: {alertHistory.length}</div>
           <div>Danger Frames: {consecutiveDangerFrames}</div>
           <div>Auto-Paused: {wasAutoPaused ? 'Yes' : 'No'}</div>
+          <div className="mt-2 pt-2 border-t">
+            <div className="font-bold">PoseNet Status:</div>
+            <div>Model Ready: {modelReady ? 'Yes' : 'No'}</div>
+            <div>Tracking: {poseTracking ? 'Yes' : 'No'}</div>
+            <div>Phase: {posePhase?.phase || 'N/A'}</div>
+            <div>Angles: {currentAngles ? 'Detecting' : 'Not detecting'}</div>
+          </div>
         </div>
       )}
     </div>
