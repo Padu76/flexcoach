@@ -111,7 +111,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       const result = addSet({
         reps: Array(currentSetCount).fill({ quality: formQuality }),
         weight: currentWeight,
-        quality,
         restTime: 0
       })
       
