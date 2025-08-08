@@ -892,7 +892,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
                 Riepilogo Alert Infortuni:
               </div>
               <div className="space-y-1">
-                {[...new Set(alertHistory.map(a => a.bodyPart))].map(bodyPart => {
+                {Array.from(new Set(alertHistory.map(a => a.bodyPart))).map(bodyPart => {
                   const count = alertHistory.filter(a => a.bodyPart === bodyPart).length
                   const severity = alertHistory.filter(a => a.bodyPart === bodyPart && a.level === 'danger').length
                   
