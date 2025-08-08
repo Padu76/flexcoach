@@ -556,10 +556,21 @@ class DataManager {
 
   public updateAppPreferences(updates: DeepPartial<AppPreferences>): OperationResult<AppPreferences> {
     try {
-      this.data.appPreferences = {
-        ...this.data.appPreferences,
-        ...updates
+      // FIX: Merge profondo mantenendo i campi required di notifications
+      const currentPrefs = this.data.appPreferences;
+      
+      // Merge manuale per gestire correttamente notifications
+      const mergedPreferences: AppPreferences = {
+        ...currentPrefs,
+        ...updates,
+        // Assicurati che notifications mantenga tutti i campi required
+        notifications: {
+          ...currentPrefs.notifications,
+          ...(updates.notifications || {})
+        }
       };
+
+      this.data.appPreferences = mergedPreferences;
 
       this.autoSave();
       this.notifyListeners('preferences_changed', this.data.appPreferences);
