@@ -46,14 +46,6 @@ interface InjuryAlert {
   autopaused?: boolean
 }
 
-interface PostureIssue {
-  type: string
-  severity: number // 0-100
-  bodyPart: string
-  message: string
-  recommendation: string
-}
-
 export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   // DataManager Hooks
   const { 
@@ -117,7 +109,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [currentAlert, setCurrentAlert] = useState<InjuryAlert | null>(null)
   const [alertHistory, setAlertHistory] = useState<InjuryAlert[]>([])
   const [postureScore, setPostureScore] = useState(100) // 0-100, 100 = perfetto
-  const [currentPostureIssues, setCurrentPostureIssues] = useState<PostureIssue[]>([])
   const [consecutiveDangerFrames, setConsecutiveDangerFrames] = useState(0)
   const [wasAutoPaused, setWasAutoPaused] = useState(false)
   
@@ -362,7 +353,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setCurrentAlert(null)
       setAlertHistory([])
       setPostureScore(100)
-      setCurrentPostureIssues([])
       setConsecutiveDangerFrames(0)
       setWasAutoPaused(false)
       // Reset counter automatico
@@ -415,7 +405,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     perfectRepsCount.current = 0
     setCurrentAlert(null)
     setPostureScore(100)
-    setCurrentPostureIssues([])
     // Reset counter automatico
     setMovementPhase('ready')
     setPerfectReps(0)
