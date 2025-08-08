@@ -58,7 +58,8 @@ export default function WeightPredictionSystem({ exerciseType, onStartWorkout }:
     updateSuggestion,
     getProgression 
   } = useWeightSuggestion(exerciseType)
-  const { setLastExercise, setLastWeight } = useCache()
+  // RIMOSSO setLastWeight che non esiste! Solo questi sono disponibili:
+  const { setLastExercise, getLastWeight } = useCache()
   
   // Stati locali
   const [workoutPlan, setWorkoutPlan] = useState<WorkoutPlan>({
@@ -250,8 +251,9 @@ export default function WeightPredictionSystem({ exerciseType, onStartWorkout }:
   
   const handleStartWorkout = () => {
     if (recommendation) {
-      // Salva peso nel cache per prossima volta
-      setLastWeight(exerciseType, recommendation.recommended)
+      // RIMOSSO setLastWeight che non esiste!
+      // Il peso verrà salvato automaticamente quando si salva il workout
+      // Salva solo l'esercizio nel cache
       setLastExercise(exerciseType)
       
       onStartWorkout(workoutPlan, recommendation.recommended)
@@ -534,26 +536,33 @@ export default function WeightPredictionSystem({ exerciseType, onStartWorkout }:
             Ultime Sessioni
           </h3>
           <div className="grid gap-2">
-            {sessions.slice(0, 3).map((session, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">
-                    {new Date(session.date).toLocaleDateString('it-IT')}
+            {sessions.slice(0, 3).map((session, idx) => {
+              // Calcola peso medio dalle sets
+              const avgWeight = session.sets.length > 0 
+                ? Math.round(session.sets.reduce((sum, set) => sum + set.weight, 0) / session.sets.length)
+                : 0
+                
+              return (
+                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {new Date(session.date).toLocaleDateString('it-IT')}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {session.totalReps} reps × {avgWeight}kg
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-600">
-                    {session.totalReps} reps × {session.avgWeight}kg
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-gray-900">
+                      {session.totalVolume} kg
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Qualità: {Math.round((session.perfectReps / session.totalReps) * 100)}%
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium text-gray-900">
-                    {session.totalVolume} kg
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Qualità: {Math.round((session.perfectReps / session.totalReps) * 100)}%
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -568,11 +577,7 @@ export default function WeightPredictionSystem({ exerciseType, onStartWorkout }:
               <li>Fai sempre riscaldamento con peso progressivo</li>
               <li>Concentrati sulla tecnica prima del peso</li>
               <li>Ascolta il tuo corpo - riduci se necessario</li>
-              {profile?.injuries && profile.injuries.length > 0 && (
-                <li className="text-red-700 font-medium">
-                  ⚠️ Attenzione agli infortuni registrati nel profilo
-                </li>
-              )}
+              {/* Nota: injuries non esiste in UserProfile, quindi rimuovo questo check */}
             </ul>
           </div>
         </div>
