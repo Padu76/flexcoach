@@ -111,6 +111,11 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [postureScore, setPostureScore] = useState(100) // 0-100, 100 = perfetto
   const [consecutiveDangerFrames, setConsecutiveDangerFrames] = useState(0)
   const [wasAutoPaused, setWasAutoPaused] = useState(false)
+  const [currentPostureIssues, setCurrentPostureIssues] = useState<Array<{
+    bodyPart: string
+    message: string
+    recommendation: string
+  }>>([])
   
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -249,7 +254,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     if (canvasRef.current) {
       setupCanvasElement(canvasRef.current)
     }
-  }, [])
+  }, [setupVideoElement, setupCanvasElement])
   
   // Inizializza workout quando si avvia
   useEffect(() => {
@@ -355,6 +360,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setPostureScore(100)
       setConsecutiveDangerFrames(0)
       setWasAutoPaused(false)
+      setCurrentPostureIssues([])
       // Reset counter automatico
       setMovementPhase('ready')
       setPerfectReps(0)
@@ -405,6 +411,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     perfectRepsCount.current = 0
     setCurrentAlert(null)
     setPostureScore(100)
+    setCurrentPostureIssues([])
     // Reset counter automatico
     setMovementPhase('ready')
     setPerfectReps(0)
@@ -818,23 +825,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             </div>
           </div>
         )}
-      </div>bounce">
-              AUTO-PAUSA SICUREZZA
-            </div>
-          )}
-          
-          {injuryAlertsEnabled && isRunning && (
-            <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
-              🛡️ Protezione Attiva
-            </div>
-          )}
-          
-          {modelReady && !poseLoading && (
-            <div className="bg-purple-500 text-white px-3 py-1 rounded-full text-sm">
-              🤖 AI Tracking ON
-            </div>
-          )}
-        </div>
+      </div>
       
       {/* Control Buttons */}
       <div className="flex gap-3 justify-center">
