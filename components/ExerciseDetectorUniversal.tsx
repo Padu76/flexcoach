@@ -1,4 +1,4 @@
-// components/ExerciseDetectorUniversal.tsx - Con DataManager integrato e fix tipi vista
+// components/ExerciseDetectorUniversal.tsx - Fix con session invece di currentWorkout
 
 'use client'
 
@@ -43,12 +43,12 @@ type ViewOrientation = 'frontal' | 'lateral' | 'unknown'
 type PreferredView = 'auto' | 'front' | 'side'
 
 export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
-  // DataManager Hooks
+  // DataManager Hooks - Fix: usa session invece di currentWorkout
   const { 
     startWorkout, 
     endWorkout, 
     addSet, 
-    currentWorkout,
+    session,  // Fix: cambiato da currentWorkout a session
     isActive 
   } = useCurrentWorkout()
   
@@ -98,6 +98,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const lastRepTime = useRef(Date.now())
   const perfectRepsCount = useRef(0)
   const totalRepsSession = useRef(0)
+  const sessionStarted = useRef(false)
   
   // Hooks personalizzati
   const { 
@@ -125,23 +126,38 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   
   // Inizializza workout quando si avvia
   useEffect(() => {
-    if (isRunning && !isActive) {
-      startWorkout(exerciseType, currentWeight)
+    if (isRunning && !sessionStarted.current) {
+      console.log('Starting workout session for:', exerciseType)
+      const result = startWorkout(exerciseType)
+      if (result.success) {
+        sessionStarted.current = true
+        console.log('Workout started successfully')
+      } else {
+        console.error('Failed to start workout:', result.error)
+      }
     }
-  }, [isRunning, isActive, exerciseType, currentWeight, startWorkout])
+  }, [isRunning, exerciseType, startWorkout])
   
   // Salva set quando si mette in pausa o ferma
   useEffect(() => {
     if ((isPaused || !isRunning) && currentSetCount > 0 && isActive) {
       const quality = perfectRepsCount.current / Math.max(1, currentSetCount) * 100
-      addSet({
+      console.log('Saving set:', { reps: currentSetCount, weight: currentWeight, quality })
+      
+      const result = addSet({
         reps: currentSetCount,
         weight: currentWeight,
         quality,
         restTime: 0
       })
-      setCurrentSetCount(0)
-      perfectRepsCount.current = 0
+      
+      if (result.success) {
+        console.log('Set saved successfully')
+        setCurrentSetCount(0)
+        perfectRepsCount.current = 0
+      } else {
+        console.error('Failed to save set:', result.error)
+      }
     }
   }, [isPaused, isRunning, currentSetCount, currentWeight, isActive, addSet])
   
@@ -226,21 +242,33 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     }
   }, [exerciseType, angles.knee])
   
-  // Finalizza workout alla fine
+  // Finalizza workout quando il componente si smonta o si ferma
   useEffect(() => {
     return () => {
-      if (isActive) {
-        endWorkout(totalRepsSession.current, sessionVolume)
-        
-        // Check achievements
-        checkAndUnlockAchievements({
-          totalWorkouts: stats.totalWorkouts + 1,
-          totalReps: stats.totalReps + totalRepsSession.current,
-          bestStreak: Math.max(stats.bestStreak, currentSetCount)
+      if (sessionStarted.current && totalRepsSession.current > 0) {
+        console.log('Finalizing workout:', { 
+          totalReps: totalRepsSession.current, 
+          volume: sessionVolume 
         })
+        
+        const result = endWorkout(totalRepsSession.current, sessionVolume)
+        
+        if (result.success) {
+          console.log('Workout ended successfully')
+          sessionStarted.current = false
+          
+          // Check achievements
+          checkAndUnlockAchievements({
+            totalWorkouts: stats.totalWorkouts + 1,
+            totalReps: stats.totalReps + totalRepsSession.current,
+            bestStreak: Math.max(stats.bestStreak, currentSetCount)
+          })
+        } else {
+          console.error('Failed to end workout:', result.error)
+        }
       }
     }
-  }, [isActive, sessionVolume, stats, currentSetCount, endWorkout, checkAndUnlockAchievements])
+  }, [])
   
   // Funzione helper per mappare i tipi di vista
   const mapViewType = (view: ViewOrientation): PreferredView => {
@@ -257,22 +285,37 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   // Handler per start/stop
   const handleStartStop = () => {
     if (isRunning) {
+      console.log('Stopping workout')
       setIsRunning(false)
       setIsPaused(false)
       stopTracking()
       
       // Salva sessione finale
-      if (isActive) {
-        endWorkout(totalRepsSession.current, sessionVolume)
+      if (sessionStarted.current && totalRepsSession.current > 0) {
+        console.log('Ending workout with:', { 
+          totalReps: totalRepsSession.current, 
+          volume: sessionVolume 
+        })
+        
+        const result = endWorkout(totalRepsSession.current, sessionVolume)
+        
+        if (result.success) {
+          console.log('Workout saved successfully')
+          playSuccess()
+        } else {
+          console.error('Failed to save workout:', result.error)
+        }
       }
       
-      // Reset contatori
+      // Reset tutto
+      sessionStarted.current = false
       setRepsCount(0)
       setCurrentSetCount(0)
       setSessionVolume(0)
       totalRepsSession.current = 0
       perfectRepsCount.current = 0
     } else {
+      console.log('Starting workout')
       setIsRunning(true)
       setIsPaused(false)
       startTracking()
@@ -697,6 +740,16 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+      
+      {/* Debug info - solo in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+          <div>Session Active: {isActive ? 'Yes' : 'No'}</div>
+          <div>Session Started: {sessionStarted.current ? 'Yes' : 'No'}</div>
+          <div>Total Reps: {totalRepsSession.current}</div>
+          <div>Session Volume: {sessionVolume}</div>
         </div>
       )}
     </div>
