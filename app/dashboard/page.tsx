@@ -261,6 +261,11 @@ function DashboardContent() {
               <Link href="/dashboard?section=profile" className="text-gray-700 hover:text-blue-600">
                 Profilo
               </Link>
+              <div className="w-px h-6 bg-gray-300" />
+              <Link href="/trainer" className="text-gray-700 hover:text-purple-600 flex items-center gap-1 font-medium">
+                <span className="text-lg">👨‍🏫</span>
+                Trainer
+              </Link>
             </div>
             
             {/* Desktop Menu Right */}
@@ -306,6 +311,10 @@ function DashboardContent() {
               </Link>
               <Link href="/dashboard?section=profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                 Profilo
+              </Link>
+              <div className="border-t border-gray-200 my-2"></div>
+              <Link href="/trainer" className="block px-3 py-2 text-purple-600 hover:bg-purple-50 rounded font-medium">
+                👨‍🏫 Trainer Dashboard
               </Link>
               <button className="w-full text-left px-3 py-2 text-blue-600 font-medium">
                 Accedi
