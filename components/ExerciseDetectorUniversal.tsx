@@ -71,8 +71,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   } = useStatistics(exerciseType)
   
   const {
-    achievements,
-    checkAndUnlockAchievements
+    achievements
   } = useAchievements()
   
   // Stati locali
@@ -255,13 +254,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         if (result.success) {
           console.log('Workout ended successfully')
           sessionStarted.current = false
-          
-          // Check achievements
-          checkAndUnlockAchievements({
-            totalWorkouts: stats.totalWorkouts + 1,
-            totalReps: stats.totalReps + totalRepsSession.current,
-            bestStreak: Math.max(stats.bestStreak, currentSetCount)
-          })
         } else {
           console.error('Failed to end workout:', result.error)
         }
