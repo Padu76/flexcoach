@@ -98,6 +98,20 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [formQuality, setFormQuality] = useState(100)
   const [currentWeight, setCurrentWeight] = useState(50)
   
+  // NUOVI STATI PER COUNTER AUTOMATICO RIPETIZIONI
+  const [movementPhase, setMovementPhase] = useState<'ready' | 'descending' | 'bottom' | 'ascending' | 'top'>('ready')
+  const [repQuality, setRepQuality] = useState<'perfect' | 'good' | 'fair' | 'poor'>('good')
+  const [currentRepStartTime, setCurrentRepStartTime] = useState(0)
+  const [repDuration, setRepDuration] = useState(0)
+  const [perfectReps, setPerfectReps] = useState(0)
+  const [goodReps, setGoodReps] = useState(0)
+  const [fairReps, setFairReps] = useState(0)
+  const [poorReps, setPoorReps] = useState(0)
+  const [lastPosition, setLastPosition] = useState(0) // 0-100, 0=top, 100=bottom
+  const [currentPosition, setCurrentPosition] = useState(0)
+  const [velocityTracking, setVelocityTracking] = useState<number[]>([])
+  const [isInProperForm, setIsInProperForm] = useState(true)
+  
   // NUOVI STATI PER ALERT INFORTUNI
   const [injuryAlertsEnabled, setInjuryAlertsEnabled] = useState(true)
   const [currentAlert, setCurrentAlert] = useState<InjuryAlert | null>(null)
@@ -120,6 +134,209 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     playBeep,
     sounds
   } = useSoundFeedback()
+  
+  // SISTEMA DI RILEVAMENTO MOVIMENTO E COUNTER AUTOMATICO
+  const detectMovementPhase = useCallback(() => {
+    if (!isRunning || isPaused) return
+    
+    // SIMULAZIONE posizione attuale (0=top, 100=bottom)
+    // In produzione qui ci sarebbe il vero tracking ML della posizione
+    const simulatePosition = () => {
+      const time = Date.now() / 1000
+      const cycleTime = 3 // 3 secondi per rep completa
+      const phase = (time % cycleTime) / cycleTime
+      
+      // Simula movimento sinusoidale con variazione realistica
+      let position = Math.sin(phase * Math.PI * 2) * 50 + 50
+      
+      // Aggiungi rumore per realismo
+      position += (Math.random() - 0.5) * 5
+      
+      // Clamp tra 0 e 100
+      return Math.max(0, Math.min(100, position))
+    }
+    
+    const newPosition = simulatePosition()
+    const velocity = newPosition - lastPosition
+    
+    // Aggiungi a velocity tracking per analisi
+    setVelocityTracking(prev => [...prev.slice(-10), velocity])
+    
+    // Threshold per determinare le fasi (personalizzati per esercizio)
+    const getThresholds = () => {
+      switch (exerciseType) {
+        case 'squat':
+          return { bottom: 75, top: 25, minRange: 40 }
+        case 'bench-press':
+          return { bottom: 80, top: 20, minRange: 50 }
+        case 'deadlift':
+          return { bottom: 85, top: 15, minRange: 60 }
+        default:
+          return { bottom: 75, top: 25, minRange: 40 }
+      }
+    }
+    
+    const thresholds = getThresholds()
+    
+    // State machine per rilevamento fasi
+    switch (movementPhase) {
+      case 'ready':
+        // Aspetta che inizi a scendere
+        if (newPosition > lastPosition + 2 && newPosition > thresholds.top) {
+          setMovementPhase('descending')
+          setCurrentRepStartTime(Date.now())
+        }
+        break
+        
+      case 'descending':
+        // Controlla se ha raggiunto il bottom
+        if (newPosition >= thresholds.bottom) {
+          setMovementPhase('bottom')
+          
+          // Valuta profondità
+          if (newPosition >= thresholds.bottom + 10) {
+            // Troppo profondo
+            if (audioEnabled) playBeep(200, 200) // Tono basso warning
+          } else if (newPosition >= thresholds.bottom) {
+            // Profondità perfetta
+            if (audioEnabled) playBeep(600, 100) // Tono positivo
+          }
+        } else if (velocity < -5) {
+          // Sta scendendo troppo veloce
+          setIsInProperForm(false)
+        }
+        break
+        
+      case 'bottom':
+        // Aspetta che inizi a risalire
+        if (newPosition < lastPosition - 2) {
+          setMovementPhase('ascending')
+        }
+        break
+        
+      case 'ascending':
+        // Controlla se ha completato la rep
+        if (newPosition <= thresholds.top) {
+          setMovementPhase('top')
+          
+          // REP COMPLETATA! Calcola qualità
+          const duration = Date.now() - currentRepStartTime
+          const avgVelocity = velocityTracking.reduce((a, b) => Math.abs(a) + Math.abs(b), 0) / velocityTracking.length
+          
+          // Determina qualità basata su criteri multipli
+          let quality: 'perfect' | 'good' | 'fair' | 'poor' = 'good'
+          
+          if (duration < 1500) {
+            // Troppo veloce
+            quality = 'poor'
+          } else if (duration > 6000) {
+            // Troppo lenta
+            quality = 'fair'
+          } else if (isInProperForm && postureScore >= 90) {
+            quality = 'perfect'
+          } else if (isInProperForm && postureScore >= 70) {
+            quality = 'good'
+          } else if (postureScore >= 50) {
+            quality = 'fair'
+          } else {
+            quality = 'poor'
+          }
+          
+          // Aggiorna counter e stats
+          completeRep(quality, duration)
+        }
+        break
+        
+      case 'top':
+        // Reset per prossima rep
+        setTimeout(() => {
+          setMovementPhase('ready')
+          setIsInProperForm(true)
+          setVelocityTracking([])
+        }, 500) // Breve pausa in cima
+        break
+    }
+    
+    // Aggiorna posizioni
+    setLastPosition(currentPosition)
+    setCurrentPosition(newPosition)
+    
+  }, [isRunning, isPaused, movementPhase, lastPosition, currentPosition, exerciseType, audioEnabled, playBeep, velocityTracking, isInProperForm, postureScore, currentRepStartTime])
+  
+  // Funzione per completare una rep
+  const completeRep = useCallback((quality: 'perfect' | 'good' | 'fair' | 'poor', duration: number) => {
+    // Incrementa contatori
+    setRepsCount(prev => prev + 1)
+    setCurrentSetCount(prev => prev + 1)
+    totalRepsSession.current++
+    
+    // Aggiorna stats per qualità
+    switch (quality) {
+      case 'perfect':
+        setPerfectReps(prev => prev + 1)
+        perfectRepsCount.current++
+        break
+      case 'good':
+        setGoodReps(prev => prev + 1)
+        break
+      case 'fair':
+        setFairReps(prev => prev + 1)
+        break
+      case 'poor':
+        setPoorReps(prev => prev + 1)
+        break
+    }
+    
+    // Aggiorna volume
+    const currentVolume = currentWeight * (repsCount + 1)
+    setSessionVolume(currentVolume)
+    
+    // Audio feedback basato su qualità
+    if (audioEnabled) {
+      switch (quality) {
+        case 'perfect':
+          if (sounds?.perfetto) sounds.perfetto()
+          break
+        case 'good':
+          playBeep(800, 100)
+          break
+        case 'fair':
+          playBeep(500, 150)
+          break
+        case 'poor':
+          playBeep(300, 200)
+          break
+      }
+    }
+    
+    // Milestone audio
+    const totalReps = repsCount + 1
+    if (totalReps % 5 === 0 && audioEnabled && sounds?.cinqueReps) {
+      setTimeout(() => sounds.cinqueReps(), 500)
+    }
+    if (totalReps % 10 === 0 && audioEnabled && sounds?.dieciReps) {
+      setTimeout(() => sounds.dieciReps(), 500)
+    }
+    
+    // Log per debug
+    console.log(`Rep ${totalReps} completata:`, {
+      quality,
+      duration: `${(duration / 1000).toFixed(1)}s`,
+      postureScore,
+      volume: currentVolume
+    })
+    
+    setRepQuality(quality)
+    setRepDuration(duration)
+  }, [repsCount, currentWeight, audioEnabled, sounds, playBeep, postureScore])
+  
+  // Esegui tracking movimento ogni 100ms quando attivo
+  useEffect(() => {
+    if (!isRunning || isPaused) return
+    
+    const interval = setInterval(detectMovementPhase, 100)
+    return () => clearInterval(interval)
+  }, [isRunning, isPaused, detectMovementPhase])
   
   // FUNZIONI PER RILEVAMENTO POSTURA E ALERT
   const analyzePosture = useCallback(() => {
@@ -433,6 +650,18 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setCurrentPostureIssues([])
       setConsecutiveDangerFrames(0)
       setWasAutoPaused(false)
+      // Reset counter automatico
+      setMovementPhase('ready')
+      setPerfectReps(0)
+      setGoodReps(0)
+      setFairReps(0)
+      setPoorReps(0)
+      setLastPosition(0)
+      setCurrentPosition(0)
+      setVelocityTracking([])
+      setIsInProperForm(true)
+      setRepQuality('good')
+      setRepDuration(0)
     } else {
       console.log('Starting workout')
       setIsRunning(true)
@@ -459,36 +688,19 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     setCurrentAlert(null)
     setPostureScore(100)
     setCurrentPostureIssues([])
+    // Reset counter automatico
+    setMovementPhase('ready')
+    setPerfectReps(0)
+    setGoodReps(0)
+    setFairReps(0)
+    setPoorReps(0)
+    setLastPosition(0)
+    setCurrentPosition(0)
+    setVelocityTracking([])
+    setIsInProperForm(true)
+    setRepQuality('good')
+    setRepDuration(0)
     if (audioEnabled && sounds?.start) sounds.start()
-  }
-  
-  // SIMULAZIONE conteggio reps per test
-  const handleAddRep = () => {
-    if (!isRunning || isPaused) return
-    
-    setRepsCount(prev => prev + 1)
-    setCurrentSetCount(prev => prev + 1)
-    totalRepsSession.current++
-    
-    const currentVolume = currentWeight * (repsCount + 1)
-    setSessionVolume(currentVolume)
-    
-    if (audioEnabled) {
-      playBeep()
-    }
-    
-    // Check milestones
-    if ((repsCount + 1) % 5 === 0 && audioEnabled) {
-      if (sounds?.cinqueReps) sounds.cinqueReps()
-    }
-    if ((repsCount + 1) % 10 === 0 && audioEnabled) {
-      if (sounds?.dieciReps) sounds.dieciReps()
-    }
-    
-    // Simula rep perfetta basata su posture score
-    if (postureScore > 70) {
-      perfectRepsCount.current++
-    }
   }
   
   const toggleAudio = () => {
@@ -565,37 +777,130 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     </div>
   )
   
-  // Stats Panel con Posture Score
+  // Stats Panel con Posture Score e Quality Breakdown
   const StatsPanel = () => (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-      <div className="bg-blue-50 rounded-lg p-3">
-        <div className="text-2xl font-bold text-blue-600">{repsCount}</div>
-        <div className="text-xs text-gray-600">Ripetizioni</div>
-      </div>
-      <div className="bg-green-50 rounded-lg p-3">
-        <div className="text-2xl font-bold text-green-600">{currentSetCount}</div>
-        <div className="text-xs text-gray-600">Set Corrente</div>
-      </div>
-      <div className="bg-purple-50 rounded-lg p-3">
-        <div className="text-2xl font-bold text-purple-600">{sessionVolume} kg</div>
-        <div className="text-xs text-gray-600">Volume Totale</div>
-      </div>
-      <div className={`rounded-lg p-3 ${
-        postureScore >= 80 ? 'bg-green-50' : 
-        postureScore >= 50 ? 'bg-yellow-50' : 'bg-red-50'
-      }`}>
-        <div className={`text-2xl font-bold ${
-          postureScore >= 80 ? 'text-green-600' : 
-          postureScore >= 50 ? 'text-yellow-600' : 'text-red-600'
-        }`}>
-          {postureScore}%
+    <div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        <div className="bg-blue-50 rounded-lg p-3">
+          <div className="text-2xl font-bold text-blue-600">{repsCount}</div>
+          <div className="text-xs text-gray-600">Ripetizioni</div>
         </div>
-        <div className="text-xs text-gray-600">Postura</div>
+        <div className="bg-green-50 rounded-lg p-3">
+          <div className="text-2xl font-bold text-green-600">{currentSetCount}</div>
+          <div className="text-xs text-gray-600">Set Corrente</div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-3">
+          <div className="text-2xl font-bold text-purple-600">{sessionVolume} kg</div>
+          <div className="text-xs text-gray-600">Volume Totale</div>
+        </div>
+        <div className={`rounded-lg p-3 ${
+          postureScore >= 80 ? 'bg-green-50' : 
+          postureScore >= 50 ? 'bg-yellow-50' : 'bg-red-50'
+        }`}>
+          <div className={`text-2xl font-bold ${
+            postureScore >= 80 ? 'text-green-600' : 
+            postureScore >= 50 ? 'text-yellow-600' : 'text-red-600'
+          }`}>
+            {postureScore}%
+          </div>
+          <div className="text-xs text-gray-600">Postura</div>
+        </div>
+        <div className="bg-orange-50 rounded-lg p-3">
+          <div className="text-2xl font-bold text-orange-600">{alertHistory.length}</div>
+          <div className="text-xs text-gray-600">Alert Totali</div>
+        </div>
       </div>
-      <div className="bg-orange-50 rounded-lg p-3">
-        <div className="text-2xl font-bold text-orange-600">{alertHistory.length}</div>
-        <div className="text-xs text-gray-600">Alert Totali</div>
-      </div>
+      
+      {/* Quality Breakdown Bar */}
+      {repsCount > 0 && (
+        <div className="bg-white rounded-lg p-3 mb-4 border border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Qualità Ripetizioni</span>
+            <span className="text-xs text-gray-500">
+              Media: {Math.round((perfectReps * 100 + goodReps * 75 + fairReps * 50 + poorReps * 25) / repsCount)}%
+            </span>
+          </div>
+          <div className="flex h-8 rounded-lg overflow-hidden bg-gray-100">
+            {perfectReps > 0 && (
+              <div 
+                className="bg-green-500 flex items-center justify-center text-white text-xs font-bold"
+                style={{ width: `${(perfectReps / repsCount) * 100}%` }}
+              >
+                {perfectReps}
+              </div>
+            )}
+            {goodReps > 0 && (
+              <div 
+                className="bg-blue-500 flex items-center justify-center text-white text-xs font-bold"
+                style={{ width: `${(goodReps / repsCount) * 100}%` }}
+              >
+                {goodReps}
+              </div>
+            )}
+            {fairReps > 0 && (
+              <div 
+                className="bg-yellow-500 flex items-center justify-center text-white text-xs font-bold"
+                style={{ width: `${(fairReps / repsCount) * 100}%` }}
+              >
+                {fairReps}
+              </div>
+            )}
+            {poorReps > 0 && (
+              <div 
+                className="bg-red-500 flex items-center justify-center text-white text-xs font-bold"
+                style={{ width: `${(poorReps / repsCount) * 100}%` }}
+              >
+                {poorReps}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between mt-2 text-xs">
+            <span className="text-green-600">Perfect: {perfectReps}</span>
+            <span className="text-blue-600">Good: {goodReps}</span>
+            <span className="text-yellow-600">Fair: {fairReps}</span>
+            <span className="text-red-600">Poor: {poorReps}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Movement Phase Indicator */}
+      {isRunning && !isPaused && (
+        <div className="bg-gray-50 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Fase Movimento</span>
+            <span className={`text-sm font-bold ${
+              movementPhase === 'descending' ? 'text-blue-600' :
+              movementPhase === 'bottom' ? 'text-purple-600' :
+              movementPhase === 'ascending' ? 'text-orange-600' :
+              movementPhase === 'top' ? 'text-green-600' :
+              'text-gray-600'
+            }`}>
+              {movementPhase === 'descending' ? '↓ Discesa' :
+               movementPhase === 'bottom' ? '⏸ Bottom' :
+               movementPhase === 'ascending' ? '↑ Risalita' :
+               movementPhase === 'top' ? '✓ Top' :
+               '⏳ Ready'}
+            </span>
+          </div>
+          {/* Position bar */}
+          <div className="relative h-4 bg-gray-200 rounded-full overflow-hidden">
+            <div 
+              className="absolute h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-100"
+              style={{ width: `${currentPosition}%` }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xs font-bold text-white drop-shadow">
+                {Math.round(currentPosition)}%
+              </span>
+            </div>
+          </div>
+          {repDuration > 0 && (
+            <div className="mt-2 text-xs text-gray-600">
+              Ultima rep: {(repDuration / 1000).toFixed(1)}s - {repQuality}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
   
@@ -769,21 +1074,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         )}
       </div>
       
-      {/* BOTTONE TEST PER AGGIUNGERE REP */}
-      {isRunning && !isPaused && (
-        <div className="mb-4 text-center">
-          <button
-            onClick={handleAddRep}
-            className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium"
-          >
-            + Aggiungi Rep (TEST)
-          </button>
-          <p className="text-xs text-gray-500 mt-1">
-            Usa questo bottone per simulare le rep mentre il tracking è in sviluppo
-          </p>
-        </div>
-      )}
-      
       {/* Control Buttons */}
       <div className="flex gap-3 justify-center">
         <button
@@ -859,15 +1149,19 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             </div>
             <div>
               <span className="text-gray-600">Reps Perfette:</span>
-              <span className="ml-2 font-bold">{perfectRepsCount.current}</span>
+              <span className="ml-2 font-bold text-green-600">{perfectReps}</span>
             </div>
             <div>
-              <span className="text-gray-600">Qualità Media:</span>
-              <span className="ml-2 font-bold">
-                {totalRepsSession.current > 0 
-                  ? Math.round((perfectRepsCount.current / totalRepsSession.current) * 100)
-                  : 0}%
-              </span>
+              <span className="text-gray-600">Reps Buone:</span>
+              <span className="ml-2 font-bold text-blue-600">{goodReps}</span>
+            </div>
+            <div>
+              <span className="text-gray-600">Reps Discrete:</span>
+              <span className="ml-2 font-bold text-yellow-600">{fairReps}</span>
+            </div>
+            <div>
+              <span className="text-gray-600">Da Migliorare:</span>
+              <span className="ml-2 font-bold text-red-600">{poorReps}</span>
             </div>
             {alertHistory.length > 0 && (
               <>
