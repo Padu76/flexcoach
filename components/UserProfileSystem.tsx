@@ -1,4 +1,4 @@
-// components/UserProfileSystem.tsx - Sistema profilo utente COMPLETO con DataManager integrato
+// components/UserProfileSystem.tsx - Sistema profilo utente DEFINITIVO con funzioni corrette
 
 'use client'
 
@@ -18,35 +18,48 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline'
 import Webcam from 'react-webcam'
+import type { CalibrationData, DeepPartial, UserProfile } from '@/types/data'
 
 export default function UserProfileSystem() {
-  // DataManager Hooks
+  // DataManager Hooks - SOLO quelli che esistono davvero
   const { profile, updateProfile, hasProfile } = useUserProfile()
-  const { calibration, updateCalibration, resetCalibration, isCalibrated } = useCalibration()
+  const { calibration, saveCalibration, isCalibrated } = useCalibration()
   const { exportData, importData } = useDataManager()
   
   // Stati locali
   const [activeTab, setActiveTab] = useState<'profile' | 'calibration' | 'data'>('profile')
   const [editMode, setEditMode] = useState(false)
-  const [tempProfile, setTempProfile] = useState(profile || {
-    name: '',
-    age: 0,
-    weight: 0,
-    height: 0,
-    experienceLevel: 'beginner' as 'beginner' | 'intermediate' | 'advanced' | 'elite',
-    injuries: [] as string[],
-    goals: [] as string[],
-    trainingDays: 3,
-    trainingGoal: 'general' as 'strength' | 'hypertrophy' | 'endurance' | 'general'
+  const [tempProfile, setTempProfile] = useState<DeepPartial<UserProfile>>({
+    name: profile?.name || '',
+    age: profile?.age || undefined,
+    weight: profile?.weight || undefined,
+    height: profile?.height || undefined,
+    experienceLevel: profile?.experienceLevel || 'beginner',
+    trainingGoal: profile?.trainingGoal || 'general'
   })
   
   // Stati calibrazione
   const [calibrationStep, setCalibrationStep] = useState(0)
   const [isCalibrating, setIsCalibrating] = useState(false)
-  const [calibrationData, setCalibrationData] = useState({
-    squat: { depth: 90, kneeAngle: 90, hipAngle: 90 },
-    benchPress: { elbowAngle: 90, shoulderAngle: 45 },
-    deadlift: { hipHinge: 45, backAngle: 45 }
+  const [calibrationData, setCalibrationData] = useState<CalibrationData>({
+    calibratedAt: new Date().toISOString(),
+    isComplete: false,
+    mobilityRanges: {
+      ankle: 45,
+      hip: 90,
+      shoulder: 180,
+      thoracic: 30
+    },
+    thresholds: {
+      squatDepth: 90,
+      benchDepth: 5,
+      deadliftLockout: 170,
+      valgusThreshold: 10,
+      spinalFlexion: 30
+    },
+    compensations: [],
+    limitations: [],
+    notes: ''
   })
   
   // Refs
@@ -56,7 +69,14 @@ export default function UserProfileSystem() {
   // Sync tempProfile con profile quando cambia
   useEffect(() => {
     if (profile) {
-      setTempProfile(profile)
+      setTempProfile({
+        name: profile.name,
+        age: profile.age,
+        weight: profile.weight,
+        height: profile.height,
+        experienceLevel: profile.experienceLevel,
+        trainingGoal: profile.trainingGoal
+      })
     }
   }, [profile])
   
@@ -66,20 +86,17 @@ export default function UserProfileSystem() {
     setEditMode(false)
   }
   
-  // Cancella profilo (reset)
+  // Reset profilo (simula delete)
   const handleDeleteProfile = () => {
     if (window.confirm('Sei sicuro di voler eliminare il profilo? Questa azione non può essere annullata.')) {
       // Reset profilo a valori vuoti
-      const emptyProfile = {
+      const emptyProfile: DeepPartial<UserProfile> = {
         name: '',
-        age: 0,
-        weight: 0,
-        height: 0,
-        experienceLevel: 'beginner' as const,
-        injuries: [],
-        goals: [],
-        trainingDays: 3,
-        trainingGoal: 'general' as const
+        age: undefined,
+        weight: undefined,
+        height: undefined,
+        experienceLevel: 'beginner',
+        trainingGoal: 'general'
       }
       updateProfile(emptyProfile)
       setTempProfile(emptyProfile)
@@ -87,21 +104,20 @@ export default function UserProfileSystem() {
     }
   }
   
-  // Import data
-  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Import data - ora accetta File correttamente
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string)
-          importData(data)
+      try {
+        const result = await importData(file)
+        if (result.success) {
           alert('Dati importati con successo!')
-        } catch (error) {
-          alert('Errore nell\'importazione dei dati')
+        } else {
+          alert(`Errore nell'importazione: ${result.error}`)
         }
+      } catch (error) {
+        alert('Errore nell\'importazione dei dati')
       }
-      reader.readAsText(file)
     }
   }
   
@@ -145,8 +161,13 @@ export default function UserProfileSystem() {
     if (calibrationStep < calibrationSteps.length - 1) {
       setCalibrationStep(calibrationStep + 1)
     } else {
-      // Salva calibrazione
-      updateCalibration(calibrationData)
+      // Completa e salva calibrazione
+      const completedCalibration: CalibrationData = {
+        ...calibrationData,
+        isComplete: true,
+        calibratedAt: new Date().toISOString()
+      }
+      saveCalibration(completedCalibration)
       setIsCalibrating(false)
       setCalibrationStep(0)
     }
@@ -155,58 +176,28 @@ export default function UserProfileSystem() {
   // Reset calibrazione
   const handleResetCalibration = () => {
     if (window.confirm('Sei sicuro di voler resettare la calibrazione?')) {
-      resetCalibration()
-      setCalibrationData({
-        squat: { depth: 90, kneeAngle: 90, hipAngle: 90 },
-        benchPress: { elbowAngle: 90, shoulderAngle: 45 },
-        deadlift: { hipHinge: 45, backAngle: 45 }
-      })
-    }
-  }
-  
-  // Aggiungi infortunio
-  const addInjury = () => {
-    const injury = prompt('Descrivi l\'infortunio o area problematica:')
-    if (injury) {
-      setTempProfile(prev => ({
-        ...prev,
-        injuries: [...(prev.injuries || []), injury]
-      }))
-      if (!editMode) {
-        updateProfile({ injuries: [...(tempProfile.injuries || []), injury] })
+      const resetData: CalibrationData = {
+        calibratedAt: new Date().toISOString(),
+        isComplete: false,
+        mobilityRanges: {
+          ankle: 45,
+          hip: 90,
+          shoulder: 180,
+          thoracic: 30
+        },
+        thresholds: {
+          squatDepth: 90,
+          benchDepth: 5,
+          deadliftLockout: 170,
+          valgusThreshold: 10,
+          spinalFlexion: 30
+        },
+        compensations: [],
+        limitations: [],
+        notes: ''
       }
-    }
-  }
-  
-  // Rimuovi infortunio
-  const removeInjury = (index: number) => {
-    const newInjuries = tempProfile.injuries?.filter((_, i) => i !== index) || []
-    setTempProfile(prev => ({ ...prev, injuries: newInjuries }))
-    if (!editMode) {
-      updateProfile({ injuries: newInjuries })
-    }
-  }
-  
-  // Aggiungi obiettivo
-  const addGoal = () => {
-    const goal = prompt('Inserisci un obiettivo:')
-    if (goal) {
-      setTempProfile(prev => ({
-        ...prev,
-        goals: [...(prev.goals || []), goal]
-      }))
-      if (!editMode) {
-        updateProfile({ goals: [...(tempProfile.goals || []), goal] })
-      }
-    }
-  }
-  
-  // Rimuovi obiettivo
-  const removeGoal = (index: number) => {
-    const newGoals = tempProfile.goals?.filter((_, i) => i !== index) || []
-    setTempProfile(prev => ({ ...prev, goals: newGoals }))
-    if (!editMode) {
-      updateProfile({ goals: newGoals })
+      saveCalibration(resetData)
+      setCalibrationData(resetData)
     }
   }
   
@@ -275,7 +266,14 @@ export default function UserProfileSystem() {
                   <button
                     onClick={() => {
                       setEditMode(false)
-                      setTempProfile(profile || tempProfile)
+                      setTempProfile({
+                        name: profile?.name || '',
+                        age: profile?.age,
+                        weight: profile?.weight,
+                        height: profile?.height,
+                        experienceLevel: profile?.experienceLevel || 'beginner',
+                        trainingGoal: profile?.trainingGoal || 'general'
+                      })
                     }}
                     className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
                   >
@@ -300,10 +298,10 @@ export default function UserProfileSystem() {
               <label className="block text-sm font-medium text-gray-700">Nome</label>
               <input
                 type="text"
-                value={tempProfile.name}
+                value={tempProfile.name || ''}
                 onChange={(e) => {
                   setTempProfile(prev => ({ ...prev, name: e.target.value }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ name: e.target.value })
                   }
                 }}
@@ -318,9 +316,9 @@ export default function UserProfileSystem() {
                 type="number"
                 value={tempProfile.age || ''}
                 onChange={(e) => {
-                  const age = parseInt(e.target.value) || 0
+                  const age = parseInt(e.target.value) || undefined
                   setTempProfile(prev => ({ ...prev, age }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ age })
                   }
                 }}
@@ -335,9 +333,9 @@ export default function UserProfileSystem() {
                 type="number"
                 value={tempProfile.weight || ''}
                 onChange={(e) => {
-                  const weight = parseFloat(e.target.value) || 0
+                  const weight = parseFloat(e.target.value) || undefined
                   setTempProfile(prev => ({ ...prev, weight }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ weight })
                   }
                 }}
@@ -352,9 +350,9 @@ export default function UserProfileSystem() {
                 type="number"
                 value={tempProfile.height || ''}
                 onChange={(e) => {
-                  const height = parseInt(e.target.value) || 0
+                  const height = parseInt(e.target.value) || undefined
                   setTempProfile(prev => ({ ...prev, height }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ height })
                   }
                 }}
@@ -366,11 +364,11 @@ export default function UserProfileSystem() {
             <div>
               <label className="block text-sm font-medium text-gray-700">Livello Esperienza</label>
               <select
-                value={tempProfile.experienceLevel}
+                value={tempProfile.experienceLevel || 'beginner'}
                 onChange={(e) => {
                   const level = e.target.value as 'beginner' | 'intermediate' | 'advanced' | 'elite'
                   setTempProfile(prev => ({ ...prev, experienceLevel: level }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ experienceLevel: level })
                   }
                 }}
@@ -385,32 +383,13 @@ export default function UserProfileSystem() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Giorni Allenamento</label>
-              <input
-                type="number"
-                min="1"
-                max="7"
-                value={tempProfile.trainingDays || 3}
-                onChange={(e) => {
-                  const days = parseInt(e.target.value) || 3
-                  setTempProfile(prev => ({ ...prev, trainingDays: days }))
-                  if (!editMode) {
-                    updateProfile({ trainingDays: days })
-                  }
-                }}
-                disabled={hasProfile && !editMode}
-                className="w-full mt-1 px-3 py-2 border rounded-lg disabled:bg-gray-100"
-              />
-            </div>
-            
-            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Obiettivo Principale</label>
               <select
                 value={tempProfile.trainingGoal || 'general'}
                 onChange={(e) => {
                   const goal = e.target.value as 'strength' | 'hypertrophy' | 'endurance' | 'general'
                   setTempProfile(prev => ({ ...prev, trainingGoal: goal }))
-                  if (!editMode) {
+                  if (!editMode && hasProfile) {
                     updateProfile({ trainingGoal: goal })
                   }
                 }}
@@ -423,63 +402,19 @@ export default function UserProfileSystem() {
                 <option value="general">Generale</option>
               </select>
             </div>
-            
-            {/* Infortuni */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Infortuni / Aree Problematiche
-              </label>
-              <div className="space-y-2">
-                {tempProfile.injuries?.map((injury, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded">
-                    <span className="text-sm">{injury}</span>
-                    <button
-                      onClick={() => removeInjury(idx)}
-                      disabled={hasProfile && !editMode}
-                      className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={addInjury}
-                  disabled={hasProfile && !editMode}
-                  className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm disabled:opacity-50"
-                >
-                  + Aggiungi Infortunio
-                </button>
-              </div>
-            </div>
-            
-            {/* Obiettivi */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Obiettivi Personali
-              </label>
-              <div className="space-y-2">
-                {tempProfile.goals?.map((goal, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 bg-green-50 rounded">
-                    <span className="text-sm">{goal}</span>
-                    <button
-                      onClick={() => removeGoal(idx)}
-                      disabled={hasProfile && !editMode}
-                      className="text-green-600 hover:text-green-800 disabled:opacity-50"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={addGoal}
-                  disabled={hasProfile && !editMode}
-                  className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm disabled:opacity-50"
-                >
-                  + Aggiungi Obiettivo
-                </button>
-              </div>
-            </div>
           </div>
+          
+          {/* BMI Display */}
+          {tempProfile.weight && tempProfile.height && (
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">BMI</span>
+                <span className="text-lg font-bold text-blue-600">
+                  {(tempProfile.weight / Math.pow(tempProfile.height / 100, 2)).toFixed(1)}
+                </span>
+              </div>
+            </div>
+          )}
           
           {/* Save button for new profile */}
           {!hasProfile && (
@@ -585,49 +520,43 @@ export default function UserProfileSystem() {
             <div>
               {/* Calibration Data Display */}
               {isCalibrated && calibration && (
-                <div className="grid md:grid-cols-3 gap-6">
+                <div className="grid md:grid-cols-2 gap-6">
                   <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-3">Squat</h3>
+                    <h3 className="font-semibold text-blue-900 mb-3">Mobilità Articolare</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Profondità:</span>
-                        <span className="font-medium">{calibration.squat?.depth || 90}°</span>
+                        <span className="text-gray-600">Caviglia:</span>
+                        <span className="font-medium">{calibration.mobilityRanges?.ankle || 45}°</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Angolo Ginocchio:</span>
-                        <span className="font-medium">{calibration.squat?.kneeAngle || 90}°</span>
+                        <span className="text-gray-600">Anca:</span>
+                        <span className="font-medium">{calibration.mobilityRanges?.hip || 90}°</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Angolo Anca:</span>
-                        <span className="font-medium">{calibration.squat?.hipAngle || 90}°</span>
+                        <span className="text-gray-600">Spalla:</span>
+                        <span className="font-medium">{calibration.mobilityRanges?.shoulder || 180}°</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Toracica:</span>
+                        <span className="font-medium">{calibration.mobilityRanges?.thoracic || 30}°</span>
                       </div>
                     </div>
                   </div>
                   
                   <div className="bg-green-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-green-900 mb-3">Panca Piana</h3>
+                    <h3 className="font-semibold text-green-900 mb-3">Soglie Personalizzate</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Angolo Gomito:</span>
-                        <span className="font-medium">{calibration.benchPress?.elbowAngle || 90}°</span>
+                        <span className="text-gray-600">Profondità Squat:</span>
+                        <span className="font-medium">{calibration.thresholds?.squatDepth || 90}°</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Angolo Spalla:</span>
-                        <span className="font-medium">{calibration.benchPress?.shoulderAngle || 45}°</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-orange-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-orange-900 mb-3">Stacco</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Hip Hinge:</span>
-                        <span className="font-medium">{calibration.deadlift?.hipHinge || 45}°</span>
+                        <span className="text-gray-600">Profondità Panca:</span>
+                        <span className="font-medium">{calibration.thresholds?.benchDepth || 5}cm</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Angolo Schiena:</span>
-                        <span className="font-medium">{calibration.deadlift?.backAngle || 45}°</span>
+                        <span className="text-gray-600">Lockout Stacco:</span>
+                        <span className="font-medium">{calibration.thresholds?.deadliftLockout || 170}°</span>
                       </div>
                     </div>
                   </div>
