@@ -526,7 +526,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
                     {new Date(session.date).toLocaleDateString('it-IT')}
                   </div>
                   <div className="text-xs text-gray-600">
-                    {session.totalReps} reps × {session.avgWeight}kg
+                    {session.totalReps} reps
                   </div>
                 </div>
                 <div className="text-right">
