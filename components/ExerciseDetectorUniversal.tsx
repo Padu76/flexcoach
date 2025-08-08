@@ -99,11 +99,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const sessionStarted = useRef(false)
   
   // Hooks personalizzati
-  const { 
-    videoRef, 
-    isLoading: cameraLoading,
-    error: cameraError 
-  } = useCamera(webcamRef)
+  const { videoRef } = useCamera(webcamRef)
   
   const { 
     playBeep, 
@@ -619,12 +615,11 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       <div className="flex gap-3 justify-center">
         <button
           onClick={handleStartStop}
-          disabled={cameraLoading || !!cameraError}
           className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
             isRunning
               ? 'bg-red-500 hover:bg-red-600 text-white'
               : 'bg-green-500 hover:bg-green-600 text-white'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          }`}
         >
           {isRunning ? (
             <>
