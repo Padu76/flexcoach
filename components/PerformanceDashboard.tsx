@@ -13,43 +13,34 @@ import {
 import { 
   ChartBarIcon,
   FireIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
+  TrendingUpIcon,
+  TrendingDownIcon,
   ClockIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon,
-  ArrowPathIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  TrophyIcon,
   CalendarIcon,
   ScaleIcon,
-  TrophyIcon,
+  ExclamationTriangleIcon,
+  ArrowPathIcon,
   DocumentArrowDownIcon
 } from '@heroicons/react/24/outline'
 import type { ExerciseType } from '@/types'
-import type { WorkoutSession } from '@/types/data'
 
 interface Props {
-  currentSession?: WorkoutSession
   exerciseType: ExerciseType
-  isLive?: boolean
-  onUpdateSession?: (session: WorkoutSession) => void
 }
 
-export default function PerformanceDashboard({ 
-  currentSession, 
-  exerciseType, 
-  isLive = false,
-  onUpdateSession 
-}: Props) {
+export default function PerformanceDashboard({ exerciseType }: Props) {
   // DataManager Hooks
   const { 
-    sessions, 
-    isLoading, 
-    lastWorkout, 
+    sessions,
+    lastWorkout,
     bestWorkout,
-    totalSessions 
-  } = useWorkoutHistory({ exercise: exerciseType })
+    getSessionsByDateRange
+  } = useWorkoutHistory({ 
+    exercise: exerciseType, 
+    limit: 30 
+  })
   
   const { 
     stats,
@@ -58,52 +49,89 @@ export default function PerformanceDashboard({
     totalWorkouts,
     totalVolume,
     totalReps,
-    currentStreak,
-    longestStreak
+    currentStreak
   } = useStatistics(exerciseType)
   
   const {
     achievements,
     unlockedCount,
-    completionPercentage,
-    isUnlocked
+    totalCount,
+    completionPercentage
   } = useAchievements()
   
   const { exportData } = useDataManager()
-  const { session: activeSession } = useCurrentWorkout()
+  const { session: currentSession, isActive } = useCurrentWorkout()
   
-  // Stati locali UI
-  const [selectedSession, setSelectedSession] = useState<WorkoutSession | null>(
-    currentSession || lastWorkout || null
-  )
-  const [viewMode, setViewMode] = useState<'current' | 'history' | 'achievements'>('current')
-  const [selectedMetric, setSelectedMetric] = useState<'quality' | 'depth' | 'duration' | 'symmetry'>('quality')
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'all'>('week')
+  // Stati locali
+  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'all'>('week')
+  const [selectedSession, setSelectedSession] = useState<any>(null)
+  const [showDetails, setShowDetails] = useState(false)
   
-  // Canvas per grafici
-  const chartCanvasRef = useRef<HTMLCanvasElement>(null)
-  const heatmapCanvasRef = useRef<HTMLCanvasElement>(null)
-  
-  // Aggiorna sessione selezionata se cambia quella corrente
-  useEffect(() => {
-    if (currentSession && isLive) {
-      setSelectedSession(currentSession)
+  // Calcola statistiche periodo
+  const getPeriodStats = () => {
+    const now = new Date()
+    let startDate = new Date()
+    
+    switch (selectedPeriod) {
+      case 'week':
+        startDate.setDate(now.getDate() - 7)
+        break
+      case 'month':
+        startDate.setMonth(now.getMonth() - 1)
+        break
+      default:
+        startDate = new Date(0) // Dall'inizio
     }
-  }, [currentSession, isLive])
-  
-  // Disegna grafico qualità per rep
-  useEffect(() => {
-    if (chartCanvasRef.current && selectedSession) {
-      drawQualityChart()
+    
+    const periodSessions = sessions.filter(s => 
+      new Date(s.date) >= startDate
+    )
+    
+    const totalVolumePeriod = periodSessions.reduce((acc, s) => acc + s.totalVolume, 0)
+    const totalRepsPeriod = periodSessions.reduce((acc, s) => acc + s.totalReps, 0)
+    const avgQualityPeriod = periodSessions.length > 0
+      ? periodSessions.reduce((acc, s) => acc + (s.perfectReps / s.totalReps * 100), 0) / periodSessions.length
+      : 0
+    
+    return {
+      sessions: periodSessions.length,
+      volume: totalVolumePeriod,
+      reps: totalRepsPeriod,
+      avgQuality: avgQualityPeriod
     }
-  }, [selectedSession, selectedMetric])
+  }
   
-  // Disegna heatmap
-  useEffect(() => {
-    if (heatmapCanvasRef.current && sessions.length > 0) {
-      drawHeatmap()
-    }
-  }, [sessions, timeRange])
+  const periodStats = getPeriodStats()
+  
+  // Calcola trend
+  const calculateTrend = () => {
+    if (sessions.length < 2) return 'stable'
+    
+    const recent = sessions.slice(0, 5)
+    const older = sessions.slice(5, 10)
+    
+    if (older.length === 0) return 'stable'
+    
+    const recentAvg = recent.reduce((acc, s) => acc + s.totalVolume, 0) / recent.length
+    const olderAvg = older.reduce((acc, s) => acc + s.totalVolume, 0) / older.length
+    
+    if (recentAvg > olderAvg * 1.1) return 'up'
+    if (recentAvg < olderAvg * 0.9) return 'down'
+    return 'stable'
+  }
+  
+  const trend = calculateTrend()
+  
+  // Prepara dati per grafico
+  const chartData = sessions
+    .slice(0, 10)
+    .reverse()
+    .map(s => ({
+      date: new Date(s.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }),
+      volume: s.totalVolume,
+      reps: s.totalReps,
+      quality: Math.round((s.perfectReps / s.totalReps) * 100)
+    }))
   
   const getExerciseName = () => {
     switch (exerciseType) {
@@ -114,613 +142,265 @@ export default function PerformanceDashboard({
     }
   }
   
-  const getQualityColor = (quality: string): string => {
-    switch (quality) {
-      case 'perfect': return '#10B981'
-      case 'good': return '#3B82F6'
-      case 'fair': return '#F59E0B'
-      case 'poor': return '#EF4444'
-      default: return '#9CA3AF'
+  const getExerciseColor = () => {
+    switch (exerciseType) {
+      case 'squat': return 'blue'
+      case 'bench-press': return 'green'
+      case 'deadlift': return 'orange'
+      default: return 'gray'
     }
   }
   
-  const getQualityEmoji = (quality: string): string => {
-    switch (quality) {
-      case 'perfect': return '⭐'
-      case 'good': return '✅'
-      case 'fair': return '⚠️'
-      case 'poor': return '❌'
-      default: return '❓'
-    }
-  }
-  
-  const calculateTrend = (): 'up' | 'down' | 'stable' => {
-    if (sessions.length < 2) return 'stable'
-    
-    const recent = sessions.slice(0, 5)
-    const older = sessions.slice(5, 10)
-    
-    if (recent.length === 0 || older.length === 0) return 'stable'
-    
-    const recentAvg = recent.reduce((acc, s) => acc + (s.perfectReps / s.totalReps * 100), 0) / recent.length
-    const olderAvg = older.reduce((acc, s) => acc + (s.perfectReps / s.totalReps * 100), 0) / older.length
-    
-    if (recentAvg > olderAvg + 5) return 'up'
-    if (recentAvg < olderAvg - 5) return 'down'
-    return 'stable'
-  }
-  
-  const drawQualityChart = () => {
-    const canvas = chartCanvasRef.current
-    if (!canvas || !selectedSession) return
-    
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    
-    // Setup canvas
-    const rect = canvas.getBoundingClientRect()
-    canvas.width = rect.width * window.devicePixelRatio
-    canvas.height = rect.height * window.devicePixelRatio
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
-    
-    // Clear
-    ctx.clearRect(0, 0, rect.width, rect.height)
-    
-    // Collect all reps from session
-    const allReps: any[] = []
-    selectedSession.sets.forEach(set => {
-      allReps.push(...set.reps)
-    })
-    
-    if (allReps.length === 0) return
-    
-    // Drawing parameters
-    const padding = 40
-    const chartWidth = rect.width - padding * 2
-    const chartHeight = rect.height - padding * 2
-    const barWidth = chartWidth / allReps.length * 0.8
-    const gap = chartWidth / allReps.length * 0.2
-    
-    // Draw axes
-    ctx.strokeStyle = '#E5E7EB'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(padding, padding)
-    ctx.lineTo(padding, padding + chartHeight)
-    ctx.lineTo(padding + chartWidth, padding + chartHeight)
-    ctx.stroke()
-    
-    // Draw bars
-    allReps.forEach((rep, index) => {
-      let value = 0
-      let color = '#9CA3AF'
-      
-      switch (selectedMetric) {
-        case 'quality':
-          value = rep.quality === 'perfect' ? 100 : 
-                 rep.quality === 'good' ? 75 :
-                 rep.quality === 'fair' ? 50 : 25
-          color = getQualityColor(rep.quality)
-          break
-        case 'depth':
-          value = Math.max(0, Math.min(100, (180 - rep.depth) / 90 * 100))
-          color = value > 66 ? '#10B981' : value > 33 ? '#F59E0B' : '#EF4444'
-          break
-        case 'duration':
-          value = Math.min(100, (rep.duration / 5000) * 100)
-          color = '#3B82F6'
-          break
-        case 'symmetry':
-          value = rep.symmetry || 90
-          color = value > 90 ? '#10B981' : value > 70 ? '#F59E0B' : '#EF4444'
-          break
-      }
-      
-      const barHeight = (value / 100) * chartHeight
-      const x = padding + index * (barWidth + gap)
-      const y = padding + chartHeight - barHeight
-      
-      // Draw bar
-      ctx.fillStyle = color
-      ctx.fillRect(x, y, barWidth, barHeight)
-      
-      // Draw rep number
-      ctx.fillStyle = '#6B7280'
-      ctx.font = '10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText(`${rep.repNumber}`, x + barWidth / 2, padding + chartHeight + 15)
-    })
-    
-    // Draw title
-    ctx.fillStyle = '#111827'
-    ctx.font = 'bold 14px sans-serif'
-    ctx.textAlign = 'left'
-    const metricTitle = selectedMetric === 'quality' ? 'Qualità' :
-                       selectedMetric === 'depth' ? 'Profondità' :
-                       selectedMetric === 'duration' ? 'Durata' : 'Simmetria'
-    ctx.fillText(`${metricTitle} per Ripetizione`, padding, 20)
-  }
-  
-  const drawHeatmap = () => {
-    const canvas = heatmapCanvasRef.current
-    if (!canvas) return
-    
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    
-    // Setup canvas
-    const rect = canvas.getBoundingClientRect()
-    canvas.width = rect.width * window.devicePixelRatio
-    canvas.height = rect.height * window.devicePixelRatio
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
-    
-    // Clear
-    ctx.clearRect(0, 0, rect.width, rect.height)
-    
-    // Filter sessions by time range
-    const now = new Date()
-    const filtered = sessions.filter(s => {
-      const sessionDate = new Date(s.date)
-      const daysDiff = (now.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24)
-      
-      if (timeRange === 'week') return daysDiff <= 7
-      if (timeRange === 'month') return daysDiff <= 30
-      return true
-    })
-    
-    if (filtered.length === 0) return
-    
-    // Group by day and calculate quality
-    const dayMap = new Map<string, number>()
-    filtered.forEach(session => {
-      const date = new Date(session.date).toLocaleDateString()
-      const quality = (session.perfectReps / session.totalReps) * 100
-      const current = dayMap.get(date) || 0
-      dayMap.set(date, Math.max(current, quality))
-    })
-    
-    // Draw heatmap grid
-    const cellSize = 15
-    const gap = 2
-    const cols = 7
-    const rows = Math.ceil(dayMap.size / cols)
-    
-    let index = 0
-    dayMap.forEach((quality, date) => {
-      const col = index % cols
-      const row = Math.floor(index / cols)
-      const x = 40 + col * (cellSize + gap)
-      const y = 40 + row * (cellSize + gap)
-      
-      // Color based on quality
-      const intensity = quality / 100
-      const hue = intensity * 120 // 0 = red, 120 = green
-      ctx.fillStyle = `hsl(${hue}, 70%, 50%)`
-      ctx.fillRect(x, y, cellSize, cellSize)
-      
-      index++
-    })
-    
-    // Title
-    ctx.fillStyle = '#111827'
-    ctx.font = 'bold 12px sans-serif'
-    ctx.fillText('Heatmap Qualità Allenamenti', 40, 25)
-  }
-  
-  const trend = calculateTrend()
+  const color = getExerciseColor()
   
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
+    <div className="w-full max-w-7xl mx-auto p-4 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ChartBarIcon className="w-6 h-6 text-blue-600" />
-            Dashboard Performance - {getExerciseName()}
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {totalWorkouts} allenamenti totali, {currentStreak} giorni streak 🔥
-          </p>
-        </div>
-        
-        {/* View Mode Tabs */}
-        <div className="flex gap-2">
-          {['current', 'history', 'achievements'].map(mode => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode as any)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                viewMode === mode
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {mode === 'current' ? '📊 Corrente' :
-               mode === 'history' ? '📈 Storico' : '🏆 Obiettivi'}
-            </button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <FireIcon className="w-5 h-5 text-blue-600" />
-            {trend === 'up' ? <ArrowTrendingUpIcon className="w-4 h-4 text-green-500" /> :
-             trend === 'down' ? <ArrowTrendingDownIcon className="w-4 h-4 text-red-500" /> :
-             <span className="w-4 h-4">➡️</span>}
-          </div>
-          <div className="text-2xl font-bold text-gray-900">{totalReps}</div>
-          <div className="text-xs text-gray-600">Ripetizioni Totali</div>
-          <div className="text-xs text-blue-600 mt-1">
-            {exerciseStats ? `${Math.round(exerciseStats.averageQuality)}% qualità` : '-'}
-          </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <CheckCircleIcon className="w-5 h-5 text-green-600" />
-          </div>
-          <div className="text-2xl font-bold text-gray-900">
-            {weeklyProgress.avgQuality.toFixed(0)}%
-          </div>
-          <div className="text-xs text-gray-600">Qualità Settimana</div>
-          <div className="text-xs text-green-600 mt-1">
-            {weeklyProgress.workouts} workout
-          </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <ScaleIcon className="w-5 h-5 text-purple-600" />
-          </div>
-          <div className="text-2xl font-bold text-gray-900">
-            {Math.round(totalVolume / 1000)}t
-          </div>
-          <div className="text-xs text-gray-600">Volume Totale</div>
-          <div className="text-xs text-purple-600 mt-1">
-            {weeklyProgress.volume}kg/sett
-          </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <TrophyIcon className="w-5 h-5 text-orange-600" />
-          </div>
-          <div className="text-2xl font-bold text-gray-900">{unlockedCount}</div>
-          <div className="text-xs text-gray-600">Achievement</div>
-          <div className="text-xs text-orange-600 mt-1">
-            {completionPercentage}% completo
-          </div>
-        </div>
-      </div>
-      
-      {/* Main Content Area */}
-      {viewMode === 'current' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quality Chart */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">
-                📊 Analisi Ripetizioni
-              </h3>
-              <select
-                value={selectedMetric}
-                onChange={(e) => setSelectedMetric(e.target.value as any)}
-                className="text-sm border border-gray-300 rounded px-2 py-1"
-              >
-                <option value="quality">Qualità</option>
-                <option value="depth">Profondità</option>
-                <option value="duration">Durata</option>
-                <option value="symmetry">Simmetria</option>
-              </select>
-            </div>
-            
-            <canvas
-              ref={chartCanvasRef}
-              className="w-full h-64"
-              style={{ width: '100%', height: '256px' }}
-            />
-            
-            {selectedSession && (
-              <div className="mt-4 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Sessione: {new Date(selectedSession.date).toLocaleDateString()}</span>
-                  <span>{selectedSession.weight || '-'} kg</span>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Heatmap */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">
-                🗓️ Heatmap Qualità
-              </h3>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value as any)}
-                className="text-sm border border-gray-300 rounded px-2 py-1"
-              >
-                <option value="week">Settimana</option>
-                <option value="month">Mese</option>
-                <option value="all">Tutto</option>
-              </select>
-            </div>
-            
-            <canvas
-              ref={heatmapCanvasRef}
-              className="w-full h-64"
-              style={{ width: '100%', height: '256px' }}
-            />
-          </div>
-        </div>
-      )}
-      
-      {/* History View */}
-      {viewMode === 'history' && (
-        <div className="space-y-6">
-          {/* Best Sessions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {lastWorkout && (
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <ClockIcon className="w-5 h-5 text-blue-600" />
-                  Ultima Sessione
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Data:</span>
-                    <span className="font-medium">{new Date(lastWorkout.date).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Peso:</span>
-                    <span className="font-medium">{lastWorkout.weight || '-'}kg</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Reps totali:</span>
-                    <span className="font-medium">{lastWorkout.totalReps}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Qualità:</span>
-                    <span className="font-medium text-green-600">
-                      {Math.round((lastWorkout.perfectReps / lastWorkout.totalReps) * 100)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {bestWorkout && (
-              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <TrophyIcon className="w-5 h-5 text-yellow-600" />
-                  Miglior Sessione
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Data:</span>
-                    <span className="font-medium">{new Date(bestWorkout.date).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Peso:</span>
-                    <span className="font-medium">{bestWorkout.weight || '-'}kg</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Reps totali:</span>
-                    <span className="font-medium">{bestWorkout.totalReps}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Qualità:</span>
-                    <span className="font-medium text-yellow-600">
-                      {Math.round((bestWorkout.perfectReps / bestWorkout.totalReps) * 100)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Session List */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">
-              📅 Storico Sessioni ({totalSessions})
-            </h3>
-            
-            {isLoading ? (
-              <div className="text-center py-8 text-gray-500">
-                Caricamento...
-              </div>
-            ) : sessions.length > 0 ? (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {sessions.map((session, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedSession(session)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedSession?.id === session.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {new Date(session.date).toLocaleDateString()} - {new Date(session.date).toLocaleTimeString()}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {session.weight || '-'} kg × {session.totalReps} reps
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-bold" style={{ 
-                          color: getQualityColor(
-                            (session.perfectReps / session.totalReps) > 0.8 ? 'perfect' :
-                            (session.perfectReps / session.totalReps) > 0.6 ? 'good' :
-                            (session.perfectReps / session.totalReps) > 0.4 ? 'fair' : 'poor'
-                          )
-                        }}>
-                          {Math.round((session.perfectReps / session.totalReps) * 100)}%
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {session.perfectReps} perfette
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {session.notes && (
-                      <div className="text-xs text-gray-500 mt-2 italic">
-                        📝 {session.notes}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <CalendarIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p>Nessuna sessione registrata</p>
-                <p className="text-sm mt-2">Inizia ad allenarti per vedere i tuoi progressi!</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* Achievements View */}
-      {viewMode === 'achievements' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Progress Achievement
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {unlockedCount} di {achievements.length} sbloccati
-                </p>
-              </div>
-              <div className="text-3xl font-bold text-orange-600">
-                {completionPercentage}%
-              </div>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 mt-3">
-              <div 
-                className="bg-gradient-to-r from-yellow-400 to-orange-500 h-3 rounded-full transition-all"
-                style={{ width: `${completionPercentage}%` }}
-              />
-            </div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ChartBarIcon className="w-6 h-6 text-blue-600" />
+              Performance Dashboard - {getExerciseName()}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Analizza i tuoi progressi e migliora la tua tecnica
+            </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {achievements.map(achievement => (
-              <div
-                key={achievement.id}
-                className={`p-4 rounded-lg border ${
-                  isUnlocked(achievement.id)
-                    ? 'border-green-300 bg-green-50'
-                    : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-semibold text-gray-900 flex items-center gap-2">
-                      {isUnlocked(achievement.id) ? '🏆' : '🔒'}
-                      {achievement.name}
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {achievement.description}
-                    </p>
-                  </div>
-                  {isUnlocked(achievement.id) ? (
-                    <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                  ) : (
-                    <div className="text-sm font-medium text-gray-500">
-                      {achievement.progress}%
-                    </div>
-                  )}
-                </div>
-                
-                {!isUnlocked(achievement.id) && (
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-600 mb-1">
-                      <span>Progresso</span>
-                      <span>{achievement.progress}/{achievement.target} {achievement.unit}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-500 h-2 rounded-full"
-                        style={{ width: `${achievement.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {isUnlocked(achievement.id) && achievement.unlockedAt && (
-                  <div className="text-xs text-green-600 mt-2">
-                    ✅ Sbloccato il {new Date(achievement.unlockedAt).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-            ))}
+          <button
+            onClick={exportData}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <DocumentArrowDownIcon className="w-5 h-5" />
+            Esporta Dati
+          </button>
+        </div>
+        
+        {/* Period Selector */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSelectedPeriod('week')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedPeriod === 'week'
+                ? `bg-${color}-600 text-white`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Settimana
+          </button>
+          <button
+            onClick={() => setSelectedPeriod('month')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedPeriod === 'month'
+                ? `bg-${color}-600 text-white`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Mese
+          </button>
+          <button
+            onClick={() => setSelectedPeriod('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedPeriod === 'all'
+                ? `bg-${color}-600 text-white`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Tutto
+          </button>
+        </div>
+      </div>
+      
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Sessioni</p>
+              <p className="text-2xl font-bold text-gray-900">{periodStats.sessions}</p>
+              <p className="text-xs text-gray-500">
+                {selectedPeriod === 'week' ? 'questa settimana' : 
+                 selectedPeriod === 'month' ? 'questo mese' : 'totali'}
+              </p>
+            </div>
+            <CalendarIcon className={`w-8 h-8 text-${color}-500`} />
           </div>
         </div>
-      )}
+        
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Volume Totale</p>
+              <p className="text-2xl font-bold text-gray-900">{periodStats.volume} kg</p>
+              <p className="text-xs text-gray-500">
+                {trend === 'up' && <span className="text-green-600">↑ In crescita</span>}
+                {trend === 'down' && <span className="text-red-600">↓ In calo</span>}
+                {trend === 'stable' && <span className="text-gray-600">→ Stabile</span>}
+              </p>
+            </div>
+            <ScaleIcon className={`w-8 h-8 text-${color}-500`} />
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Ripetizioni</p>
+              <p className="text-2xl font-bold text-gray-900">{periodStats.reps}</p>
+              <p className="text-xs text-gray-500">
+                Media: {periodStats.sessions > 0 ? Math.round(periodStats.reps / periodStats.sessions) : 0}/sessione
+              </p>
+            </div>
+            <FireIcon className={`w-8 h-8 text-${color}-500`} />
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Qualità Media</p>
+              <p className="text-2xl font-bold text-gray-900">{Math.round(periodStats.avgQuality)}%</p>
+              <p className="text-xs text-gray-500">
+                {periodStats.avgQuality > 80 ? 
+                  <span className="text-green-600">Ottima forma</span> :
+                  periodStats.avgQuality > 60 ?
+                  <span className="text-yellow-600">Buona forma</span> :
+                  <span className="text-red-600">Da migliorare</span>
+                }
+              </p>
+            </div>
+            <CheckCircleIcon className={`w-8 h-8 text-${color}-500`} />
+          </div>
+        </div>
+      </div>
       
-      {/* Detailed Rep Analysis */}
-      {selectedSession && viewMode === 'current' && (
-        <div className="mt-6 bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-4">
-            🔍 Analisi Dettagliata Serie
+      {/* Progress Chart */}
+      {chartData.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Progressi nel Tempo
           </h3>
           
+          {/* Simple Bar Chart */}
           <div className="space-y-4">
-            {selectedSession.sets.map((set, setIdx) => (
-              <div key={setIdx} className="bg-white rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-gray-900">
-                    Serie {set.setNumber}
-                  </span>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-600">
-                      Qualità: {set.averageQuality.toFixed(0)}%
-                    </span>
-                    <CheckCircleIcon className="w-4 h-4 text-green-500" />
+            {chartData.map((data, idx) => (
+              <div key={idx} className="flex items-center gap-4">
+                <div className="w-20 text-sm text-gray-600">{data.date}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-sm text-gray-700">Volume:</div>
+                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                      <div 
+                        className={`bg-${color}-500 h-4 rounded-full`}
+                        style={{ width: `${(data.volume / Math.max(...chartData.map(d => d.volume))) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-sm font-medium w-16 text-right">{data.volume}kg</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-gray-700">Qualità:</div>
+                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                      <div 
+                        className={`h-4 rounded-full ${
+                          data.quality > 80 ? 'bg-green-500' :
+                          data.quality > 60 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${data.quality}%` }}
+                      />
+                    </div>
+                    <div className="text-sm font-medium w-16 text-right">{data.quality}%</div>
                   </div>
                 </div>
-                
-                <div className="flex gap-1 flex-wrap">
-                  {set.reps.map((rep, repIdx) => (
-                    <div
-                      key={repIdx}
-                      className="relative group"
-                    >
-                      <div
-                        className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium cursor-pointer transition-transform hover:scale-110`}
-                        style={{ 
-                          backgroundColor: getQualityColor(rep.quality) + '20', 
-                          color: getQualityColor(rep.quality) 
-                        }}
-                      >
-                        {getQualityEmoji(rep.quality)}
-                      </div>
-                      
-                      {/* Tooltip */}
-                      <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-10">
-                        <div>Rep {rep.repNumber}</div>
-                        <div>Profondità: {rep.depth}°</div>
-                        <div>Durata: {(rep.duration / 1000).toFixed(1)}s</div>
-                        <div>Simmetria: {rep.symmetry}%</div>
-                      </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Recent Sessions */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Sessioni Recenti
+        </h3>
+        
+        {sessions.length > 0 ? (
+          <div className="space-y-3">
+            {sessions.slice(0, 5).map((session, idx) => (
+              <div 
+                key={idx} 
+                className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => {
+                  setSelectedSession(session)
+                  setShowDetails(true)
+                }}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {new Date(session.date).toLocaleDateString('it-IT', { 
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long'
+                      })}
                     </div>
-                  ))}
+                    <div className="text-sm text-gray-600 mt-1">
+                      {session.totalReps} reps • {session.totalVolume} kg totali
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      (session.perfectReps / session.totalReps) > 0.8 
+                        ? 'bg-green-100 text-green-800'
+                        : (session.perfectReps / session.totalReps) > 0.6
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {Math.round((session.perfectReps / session.totalReps) * 100)}% qualità
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {session.duration ? `${Math.round(session.duration / 60)} min` : '-'}
+                    </div>
+                  </div>
                 </div>
-                
-                {set.restTime && setIdx < selectedSession.sets.length - 1 && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    Riposo: {set.restTime}s
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            Nessuna sessione registrata per {getExerciseName()}
+          </div>
+        )}
+      </div>
+      
+      {/* Achievements */}
+      {achievements.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <TrophyIcon className="w-5 h-5 text-yellow-500" />
+              Achievements
+            </h3>
+            <div className="text-sm text-gray-600">
+              {unlockedCount}/{totalCount} sbloccati ({completionPercentage}%)
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {achievements.slice(0, 8).map((achievement, idx) => (
+              <div 
+                key={idx}
+                className={`p-3 rounded-lg border-2 ${
+                  achievement.unlockedAt
+                    ? 'border-yellow-400 bg-yellow-50'
+                    : 'border-gray-200 bg-gray-50 opacity-50'
+                }`}
+              >
+                <div className="text-2xl mb-1">{achievement.icon}</div>
+                <div className="text-xs font-medium text-gray-900">{achievement.name}</div>
+                {achievement.unlockedAt && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(achievement.unlockedAt).toLocaleDateString('it-IT')}
                   </div>
                 )}
               </div>
@@ -729,24 +409,106 @@ export default function PerformanceDashboard({
         </div>
       )}
       
-      {/* Actions */}
-      <div className="mt-6 flex gap-3">
-        <button
-          onClick={exportData}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
-        >
-          <DocumentArrowDownIcon className="w-4 h-4" />
-          Esporta Tutti i Dati
-        </button>
-        
-        {activeSession && (
-          <button
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium ml-auto"
-          >
-            📊 Sessione Live Attiva
+      {/* Session Details Modal */}
+      {showDetails && selectedSession && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-bold text-gray-900">
+                Dettagli Sessione
+              </h3>
+              <button
+                onClick={() => setShowDetails(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="text-sm text-gray-600">Data</div>
+                  <div className="font-medium">
+                    {new Date(selectedSession.date).toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Durata</div>
+                  <div className="font-medium">
+                    {selectedSession.duration ? `${Math.round(selectedSession.duration / 60)} minuti` : 'N/D'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Volume Totale</div>
+                  <div className="font-medium">{selectedSession.totalVolume} kg</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Ripetizioni Totali</div>
+                  <div className="font-medium">{selectedSession.totalReps}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Reps Perfette</div>
+                  <div className="font-medium">{selectedSession.perfectReps}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Qualità Media</div>
+                  <div className="font-medium">
+                    {Math.round((selectedSession.perfectReps / selectedSession.totalReps) * 100)}%
+                  </div>
+                </div>
+              </div>
+              
+              {selectedSession.sets && selectedSession.sets.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Serie Completate</h4>
+                  <div className="space-y-2">
+                    {selectedSession.sets.map((set: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <span>Set {idx + 1}</span>
+                        <span>{set.reps?.length || 0} reps @ {set.weight || 0}kg</span>
+                        <span className="text-sm text-gray-600">
+                          Qualità: {set.averageQuality || 0}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowDetails(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Empty State */}
+      {sessions.length === 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+          <ExclamationTriangleIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Nessun dato disponibile
+          </h3>
+          <p className="text-gray-600 mb-4">
+            Inizia ad allenarti con {getExerciseName()} per vedere le tue statistiche!
+          </p>
+          <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Inizia Allenamento
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
