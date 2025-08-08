@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Link from 'next/link'
 import { 
   HomeIcon,
   UserCircleIcon,
@@ -109,10 +110,10 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Link href="/" className="text-2xl font-bold text-gray-900 flex items-center gap-2 hover:text-blue-600 transition-colors">
                 <FireIcon className="w-6 h-6 text-orange-500" />
                 FlexCoach AI
-              </h1>
+              </Link>
               
               {/* Navigation */}
               <nav className="hidden md:flex gap-6">
@@ -140,6 +141,17 @@ export default function DashboardPage() {
             </div>
             
             <div className="flex items-center gap-4">
+              <nav className="hidden md:flex gap-6 mr-6">
+                <Link href="/" className="text-gray-600 hover:text-gray-900">
+                  Home
+                </Link>
+                <Link href="/exercises" className="text-gray-600 hover:text-gray-900">
+                  Esercizi
+                </Link>
+                <Link href="/dashboard?section=profile" className="text-gray-600 hover:text-gray-900">
+                  Profilo
+                </Link>
+              </nav>
               <Link
                 href="/exercises"
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
