@@ -67,8 +67,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   
   const { 
     stats,
-    exerciseStats,
-    updateStatistics 
+    exerciseStats
   } = useStatistics(exerciseType)
   
   const {
