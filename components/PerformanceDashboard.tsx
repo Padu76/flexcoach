@@ -13,8 +13,8 @@ import {
 import { 
   ChartBarIcon,
   FireIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
   ClockIcon,
   CheckCircleIcon,
   TrophyIcon,
