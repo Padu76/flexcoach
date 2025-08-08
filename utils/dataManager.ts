@@ -158,14 +158,20 @@ class DataManager {
     ];
   }
 
-  // Genera ID univoco dispositivo
+  // Genera ID univoco dispositivo - FIX per SSR
   private generateDeviceId(): string {
-    const stored = localStorage.getItem('flexcoach_device_id');
-    if (stored) return stored;
+    // Check se siamo nel browser (non in SSR)
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('flexcoach_device_id');
+      if (stored) return stored;
+      
+      const id = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('flexcoach_device_id', id);
+      return id;
+    }
     
-    const id = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('flexcoach_device_id', id);
-    return id;
+    // Fallback per SSR - genera un ID temporaneo
+    return `device_ssr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   // Genera ID univoco generico
@@ -180,6 +186,15 @@ class DataManager {
   // Carica dati da localStorage
   public loadFromStorage(): OperationResult<FlexCoachData> {
     try {
+      // Check se siamo nel browser
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return { 
+          success: true, 
+          data: this.data,
+          timestamp: new Date().toISOString() 
+        };
+      }
+
       const stored = localStorage.getItem(STORAGE_KEY);
       if (!stored) {
         return { 
@@ -219,6 +234,15 @@ class DataManager {
   // Salva dati in localStorage
   public saveToStorage(): OperationResult {
     try {
+      // Check se siamo nel browser
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return { 
+          success: false,
+          error: 'Storage not available (SSR)',
+          timestamp: new Date().toISOString() 
+        };
+      }
+
       // Rimuovi cache prima di salvare
       const toSave = { ...this.data };
       delete toSave._cache;
@@ -865,6 +889,12 @@ class DataManager {
   }
 
   public exportToFile(): void {
+    // Check se siamo nel browser
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      console.error('Export not available during SSR');
+      return;
+    }
+
     const data = this.exportData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -965,7 +995,8 @@ class DataManager {
   }
 
   public clearAllData(): OperationResult {
-    if (confirm('Sei sicuro di voler cancellare tutti i dati? Questa azione non può essere annullata.')) {
+    // Check se siamo nel browser
+    if (typeof window !== 'undefined' && confirm('Sei sicuro di voler cancellare tutti i dati? Questa azione non può essere annullata.')) {
       this.data = this.getDefaultData();
       this.saveToStorage();
       this.notifyListeners('data_reset', null);
