@@ -88,7 +88,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [alerts, setAlerts] = useState<string[]>([])
   const [formQuality, setFormQuality] = useState(100)
   const [depthReached, setDepthReached] = useState(0)
-  const [currentWeight, setCurrentWeight] = useState(lastWorkout?.avgWeight || 50)
+  const [currentWeight, setCurrentWeight] = useState(50) // Default 50kg
   
   // Refs
   const webcamRef = useRef<Webcam>(null)
