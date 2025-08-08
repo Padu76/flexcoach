@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -66,72 +67,74 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
       <body className={`${inter.className} antialiased bg-gray-50 text-gray-900`}>
-        {/* Skip to main content for accessibility */}
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary-600 text-white px-4 py-2 rounded-md z-50"
-        >
-          Vai al contenuto principale
-        </a>
-        
-        {/* Main application */}
-        <div className="min-h-screen flex flex-col">
-          {/* Header semplificato senza navigation */}
-          <header className="bg-white shadow-sm border-b border-gray-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-16">
-                <div className="flex items-center">
-                  <span className="text-2xl font-bold text-primary-600">
-                    FlexCoach
-                  </span>
-                </div>
-                
-                {/* Placeholder per menu futuro */}
-                <nav className="hidden md:flex items-center space-x-4">
-                  <span className="text-sm text-gray-500">
-                    Menu presto disponibile
-                  </span>
-                </nav>
-                
-                {/* Mobile menu placeholder */}
-                <div className="md:hidden">
-                  <span className="text-sm text-gray-500">
-                    🚧
-                  </span>
+        <ErrorBoundary>
+          {/* Skip to main content for accessibility */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary-600 text-white px-4 py-2 rounded-md z-50"
+          >
+            Vai al contenuto principale
+          </a>
+          
+          {/* Main application */}
+          <div className="min-h-screen flex flex-col">
+            {/* Header semplificato senza navigation */}
+            <header className="bg-white shadow-sm border-b border-gray-200">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center h-16">
+                  <div className="flex items-center">
+                    <span className="text-2xl font-bold text-primary-600">
+                      FlexCoach
+                    </span>
+                  </div>
+                  
+                  {/* Placeholder per menu futuro */}
+                  <nav className="hidden md:flex items-center space-x-4">
+                    <span className="text-sm text-gray-500">
+                      Menu presto disponibile
+                    </span>
+                  </nav>
+                  
+                  {/* Mobile menu placeholder */}
+                  <div className="md:hidden">
+                    <span className="text-sm text-gray-500">
+                      🚧
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </header>
+            </header>
 
-          {/* Main content */}
-          <main id="main-content" className="flex-1">
-            {children}
-          </main>
+            {/* Main content */}
+            <main id="main-content" className="flex-1">
+              {children}
+            </main>
 
-          {/* Footer */}
-          <footer className="bg-gray-800 text-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-              <div className="text-center">
-                <p className="text-gray-400">
-                  © {new Date().getFullYear()} FlexCoach. Tutti i diritti riservati.
-                </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  Allenamento fitness AI con correzione della forma in tempo reale
-                </p>
-                <p className="text-xs text-yellow-400 mt-4">
-                  🚧 Sito in costruzione - Funzionalità in arrivo presto!
-                </p>
+            {/* Footer */}
+            <footer className="bg-gray-800 text-white">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="text-center">
+                  <p className="text-gray-400">
+                    © {new Date().getFullYear()} FlexCoach. Tutti i diritti riservati.
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Allenamento fitness AI con correzione della forma in tempo reale
+                  </p>
+                  <p className="text-xs text-yellow-400 mt-4">
+                    🚧 Sito in costruzione - Funzionalità in arrivo presto!
+                  </p>
+                </div>
               </div>
-            </div>
-          </footer>
-        </div>
-        
-        {/* Development indicator */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="fixed bottom-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded text-xs font-mono">
-            DEV
+            </footer>
           </div>
-        )}
+          
+          {/* Development indicator */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="fixed bottom-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded text-xs font-mono">
+              DEV
+            </div>
+          )}
+        </ErrorBoundary>
       </body>
     </html>
   )
