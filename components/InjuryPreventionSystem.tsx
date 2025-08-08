@@ -378,7 +378,7 @@ export default function InjuryPreventionSystem({
       }
     })
     
-    return [...new Set(recs)] // Rimuovi duplicati
+    return Array.from(new Set(recs)) // Rimuovi duplicati
   }
   
   // Calcola metriche di fatica
