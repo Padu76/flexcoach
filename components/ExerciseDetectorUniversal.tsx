@@ -86,7 +86,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const { 
     playBeep,
     sounds
-  } = useSoundFeedback(audioEnabled)
+  } = useSoundFeedback()
   
   // Inizializza workout quando si avvia
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         
         if (result.success) {
           console.log('Workout saved successfully')
-          if (sounds?.start) sounds.start()
+          if (audioEnabled && sounds?.start) sounds.start()
         } else {
           console.error('Failed to save workout:', result.error)
         }
@@ -181,7 +181,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       console.log('Starting workout')
       setIsRunning(true)
       setIsPaused(false)
-      if (sounds?.start) sounds.start()
+      if (audioEnabled && sounds?.start) sounds.start()
     }
   }
   
@@ -199,7 +199,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     setSessionVolume(0)
     totalRepsSession.current = 0
     perfectRepsCount.current = 0
-    if (sounds?.start) sounds.start()
+    if (audioEnabled && sounds?.start) sounds.start()
   }
   
   // SIMULAZIONE conteggio reps per test
@@ -213,13 +213,15 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     const currentVolume = currentWeight * (repsCount + 1)
     setSessionVolume(currentVolume)
     
-    playBeep()
+    if (audioEnabled) {
+      playBeep()
+    }
     
     // Check milestones
-    if ((repsCount + 1) % 5 === 0) {
+    if ((repsCount + 1) % 5 === 0 && audioEnabled) {
       if (sounds?.cinqueReps) sounds.cinqueReps()
     }
-    if ((repsCount + 1) % 10 === 0) {
+    if ((repsCount + 1) % 10 === 0 && audioEnabled) {
       if (sounds?.dieciReps) sounds.dieciReps()
     }
     
