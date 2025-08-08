@@ -12,572 +12,363 @@ import {
   BellIcon,
   DocumentArrowDownIcon,
   DocumentArrowUpIcon,
-  TrophyIcon,
-  SparklesIcon,
-  Cog6ToothIcon,
-  ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowRightOnRectangleIcon,
+  PlayCircleIcon,
+  FireIcon,
+  TrophyIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline'
-import type { ExerciseType } from '@/types'
-
-// Import componenti (se esistono)
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import { useDataManager } from '@/hooks/useDataManager'
 
-// Import dinamici per evitare errori SSR
-const UserProfileSystem = dynamic(() => import('@/components/UserProfileSystem'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento profilo...</div></div>
-})
+// Dynamic imports per evitare SSR issues
+const UserProfileSystem = dynamic(() => import('@/components/UserProfileSystem'), { ssr: false })
+const PerformanceDashboard = dynamic(() => import('@/components/PerformanceDashboard'), { ssr: false })
+const WeightPredictionSystem = dynamic(() => import('@/components/WeightPredictionSystem'), { ssr: false })
+const InjuryPreventionSystem = dynamic(() => import('@/components/InjuryPreventionSystem'), { ssr: false })
 
-const PerformanceDashboard = dynamic(() => import('@/components/PerformanceDashboard'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento dashboard...</div></div>
-})
-
-const InjuryPreventionSystem = dynamic(() => import('@/components/InjuryPreventionSystem'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento sistema infortuni...</div></div>
-})
-
-const WeightPredictionSystem = dynamic(() => import('@/components/WeightPredictionSystem'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento predizione pesi...</div></div>
-})
+type ExerciseType = 'squat' | 'bench-press' | 'deadlift'
 
 export default function DashboardPage() {
-  const [activeSection, setActiveSection] = useState('overview')
+  const searchParams = useSearchParams()
+  const section = searchParams.get('section') || 'overview'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('squat')
-  const [userData, setUserData] = useState({
-    name: 'Atleta',
-    workoutsThisWeek: 3,
-    totalWorkouts: 42,
-    currentStreak: 7,
-    lastWorkout: 'Oggi',
-    perfectReps: 156,
-    totalVolume: '12,450 kg',
-    achievements: 8
-  })
-
-  // Check URL params per sezione
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const section = params.get('section')
-    if (section) {
-      setActiveSection(section)
-    }
-  }, [])
-
-  const menuItems = [
-    { id: 'overview', name: 'Panoramica', icon: HomeIcon },
+  const { exportData, importData } = useDataManager()
+  
+  // Sidebar items
+  const sidebarItems = [
+    { id: 'overview', name: 'Overview', icon: HomeIcon },
     { id: 'profile', name: 'Profilo', icon: UserCircleIcon },
     { id: 'performance', name: 'Performance', icon: ChartBarIcon },
-    { id: 'weight-calculator', name: 'Calcolo Pesi', icon: CalculatorIcon },
-    { id: 'injury-prevention', name: 'Prevenzione Infortuni', icon: ShieldCheckIcon },
-    { id: 'settings', name: 'Impostazioni', icon: CogIcon },
+    { id: 'weight-calculator', name: 'Calcolo Peso', icon: CalculatorIcon },
+    { id: 'injury-prevention', name: 'Prevenzione Infortuni', icon: ShieldCheckIcon }
   ]
-
-  const exercises = [
-    { value: 'squat', label: 'Squat', icon: '🏋️' },
-    { value: 'bench-press', label: 'Panca Piana', icon: '💪' },
-    { value: 'deadlift', label: 'Stacco da Terra', icon: '⚡' }
-  ]
-
+  
+  // Exercise selector per le sezioni che lo richiedono
+  const ExerciseSelector = () => (
+    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Seleziona Esercizio
+      </label>
+      <div className="grid grid-cols-3 gap-3">
+        <button
+          onClick={() => setSelectedExercise('squat')}
+          className={`px-4 py-2 rounded-lg border-2 transition-all ${
+            selectedExercise === 'squat'
+              ? 'border-blue-500 bg-blue-50 text-blue-700'
+              : 'border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          🏋️ Squat
+        </button>
+        <button
+          onClick={() => setSelectedExercise('bench-press')}
+          className={`px-4 py-2 rounded-lg border-2 transition-all ${
+            selectedExercise === 'bench-press'
+              ? 'border-green-500 bg-green-50 text-green-700'
+              : 'border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          💪 Panca
+        </button>
+        <button
+          onClick={() => setSelectedExercise('deadlift')}
+          className={`px-4 py-2 rounded-lg border-2 transition-all ${
+            selectedExercise === 'deadlift'
+              ? 'border-orange-500 bg-orange-50 text-orange-700'
+              : 'border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          ⚡ Stacco
+        </button>
+      </div>
+    </div>
+  )
+  
+  // Render content based on section
   const renderContent = () => {
-    switch(activeSection) {
+    switch (section) {
+      case 'overview':
+        return (
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-6">Dashboard Overview</h1>
+            
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100">Allenamenti Totali</p>
+                    <p className="text-3xl font-bold">24</p>
+                  </div>
+                  <FireIcon className="w-8 h-8 text-blue-200" />
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-100">Streak Settimana</p>
+                    <p className="text-3xl font-bold">5</p>
+                  </div>
+                  <TrophyIcon className="w-8 h-8 text-green-200" />
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-100">Ripetizioni Totali</p>
+                    <p className="text-3xl font-bold">342</p>
+                  </div>
+                  <ChartBarIcon className="w-8 h-8 text-purple-200" />
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-orange-100">Qualità Media</p>
+                    <p className="text-3xl font-bold">85%</p>
+                  </div>
+                  <ClockIcon className="w-8 h-8 text-orange-200" />
+                </div>
+              </div>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Avvia Allenamento Rapido</h2>
+              <ExerciseSelector />
+              <Link
+                href={`/exercises/${selectedExercise}/pre-workout`}
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <PlayCircleIcon className="w-5 h-5 mr-2" />
+                Inizia {selectedExercise === 'squat' ? 'Squat' : selectedExercise === 'bench-press' ? 'Panca' : 'Stacco'}
+              </Link>
+            </div>
+            
+            {/* Data Management */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gestione Dati</h2>
+              <div className="flex gap-4">
+                <button
+                  onClick={exportData}
+                  className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <DocumentArrowDownIcon className="w-5 h-5 mr-2" />
+                  Esporta Backup
+                </button>
+                <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                  <DocumentArrowUpIcon className="w-5 h-5 mr-2" />
+                  Importa Backup
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const reader = new FileReader()
+                        reader.onload = (e) => {
+                          try {
+                            const data = JSON.parse(e.target?.result as string)
+                            importData(data)
+                            alert('Dati importati con successo!')
+                          } catch (error) {
+                            alert('Errore nell\'importazione dei dati')
+                          }
+                        }
+                        reader.readAsText(file)
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        )
+      
       case 'profile':
         return <UserProfileSystem />
       
       case 'performance':
         return (
-          <div className="space-y-4">
-            {/* Exercise Selector for Performance */}
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Seleziona Esercizio da Analizzare
-              </label>
-              <div className="flex gap-2">
-                {exercises.map(exercise => (
-                  <button
-                    key={exercise.value}
-                    onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      selectedExercise === exercise.value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>{exercise.icon}</span>
-                    <span>{exercise.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div>
+            <ExerciseSelector />
             <PerformanceDashboard exerciseType={selectedExercise} />
           </div>
         )
       
       case 'injury-prevention':
-        return <InjuryPreventionSystem />
+        return (
+          <div>
+            <ExerciseSelector />
+            <InjuryPreventionSystem exerciseType={selectedExercise} />
+          </div>
+        )
       
       case 'weight-calculator':
         return (
-          <div className="space-y-4">
-            {/* Exercise Selector for Weight Calculator */}
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Calcola Peso Ottimale per:
-              </label>
-              <div className="flex gap-2">
-                {exercises.map(exercise => (
-                  <button
-                    key={exercise.value}
-                    onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      selectedExercise === exercise.value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>{exercise.icon}</span>
-                    <span>{exercise.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div>
+            <ExerciseSelector />
             <WeightPredictionSystem 
               exerciseType={selectedExercise}
               onStartWorkout={(plan, weight) => {
-                // Naviga alla pagina esercizio con parametri
-                window.location.href = `/exercises/${selectedExercise}?weight=${weight}&reps=${plan.targetReps}&sets=${plan.targetSets}`
+                // Salva e vai all'allenamento
+                window.location.href = `/exercises/${selectedExercise}/pre-workout`
               }}
             />
           </div>
         )
       
-      case 'settings':
-        return <SettingsSection />
-      
-      case 'overview':
       default:
-        return <OverviewSection userData={userData} selectedExercise={selectedExercise} setSelectedExercise={setSelectedExercise} />
+        return <div>Sezione non trovata</div>
     }
   }
-
+  
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header Navigation */}
-      <header className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md shadow-sm z-50">
+      {/* Top Navigation */}
+      <nav className="bg-white shadow-sm fixed w-full top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo - Sempre Cliccabile */}
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">F</span>
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                FlexCoach AI
+          <div className="flex justify-between items-center h-16">
+            {/* Logo - Always links to home */}
+            <Link href="/" className="flex items-center">
+              <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                FlexCoach
               </span>
             </Link>
-
+            
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/" className="text-gray-600 hover:text-gray-900 transition-colors">
+            <div className="hidden md:flex items-center space-x-8">
+              <Link href="/" className="text-gray-700 hover:text-blue-600 flex items-center gap-1">
+                <HomeIcon className="w-4 h-4" />
                 Home
               </Link>
-              <Link href="/exercises" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="/exercises" className="text-gray-700 hover:text-blue-600">
                 Esercizi
               </Link>
-              <Link href="/dashboard" className="text-gray-900 font-medium">
+              <Link href="/dashboard" className="text-blue-600 font-medium">
                 Dashboard
               </Link>
-              <Link href="/dashboard?section=profile" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="/dashboard?section=profile" className="text-gray-700 hover:text-blue-600">
                 Profilo
               </Link>
-            </nav>
-
-            {/* Desktop Right Menu */}
-            <div className="hidden md:flex items-center gap-2">
-              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
-                <BellIcon className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </div>
+            
+            {/* Desktop Menu Right */}
+            <div className="hidden md:flex items-center space-x-4">
+              <button className="p-2 text-gray-600 hover:text-blue-600">
+                <BellIcon className="w-5 h-5" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <UserCircleIcon className="w-5 h-5 text-gray-600" />
+              <button className="p-2 text-gray-600 hover:text-blue-600">
+                <CogIcon className="w-5 h-5" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <Cog6ToothIcon className="w-5 h-5 text-gray-600" />
-              </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <ArrowRightOnRectangleIcon className="w-5 h-5 text-gray-600" />
+              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <UserCircleIcon className="w-4 h-4" />
+                Accedi
               </button>
             </div>
-
-            {/* Mobile Menu Button */}
+            
+            {/* Mobile menu button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="md:hidden p-2"
             >
               {isMobileMenuOpen ? (
-                <XMarkIcon className="w-6 h-6 text-gray-600" />
+                <XMarkIcon className="w-6 h-6" />
               ) : (
-                <Bars3Icon className="w-6 h-6 text-gray-600" />
+                <Bars3Icon className="w-6 h-6" />
               )}
             </button>
           </div>
         </div>
-
+        
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden bg-white border-t border-gray-200">
-            <div className="px-4 py-2 space-y-1">
-              <Link 
-                href="/" 
-                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+          <div className="md:hidden bg-white border-t">
+            <div className="px-2 pt-2 pb-3 space-y-1">
+              <Link href="/" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                 Home
               </Link>
-              <Link 
-                href="/exercises" 
-                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/exercises" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                 Esercizi
               </Link>
-              <Link 
-                href="/dashboard" 
-                className="block px-3 py-2 rounded-lg bg-blue-50 text-blue-600 font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/dashboard" className="block px-3 py-2 text-blue-600 font-medium">
                 Dashboard
               </Link>
-              <Link 
-                href="/dashboard?section=profile" 
-                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/dashboard?section=profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                 Profilo
               </Link>
-              <div className="border-t border-gray-200 mt-2 pt-2">
-                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2">
-                  <BellIcon className="w-5 h-5" />
-                  Notifiche
-                  <span className="ml-auto w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
-                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
-                  Impostazioni
-                </button>
-                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
-                  Logout
-                </button>
-              </div>
+              <button className="w-full text-left px-3 py-2 text-blue-600 font-medium">
+                Accedi
+              </button>
             </div>
           </div>
         )}
-      </header>
-
-      {/* Main Layout */}
-      <div className="flex h-screen pt-16">
-        {/* Sidebar - Desktop */}
-        <aside className="hidden md:flex md:w-64 bg-white shadow-sm">
-          <div className="flex flex-col w-full">
-            <div className="p-4">
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-                Menu Dashboard
-              </h2>
-              <nav className="space-y-1">
-                {menuItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveSection(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                      activeSection === item.id
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="p-4 mt-auto border-t">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                Azioni Rapide
-              </h3>
-              <div className="space-y-2">
-                <Link 
-                  href="/exercises"
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <SparklesIcon className="w-5 h-5" />
-                  <span className="text-sm font-medium">Nuovo Allenamento</span>
-                </Link>
-                <button className="w-full flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                  <DocumentArrowDownIcon className="w-5 h-5" />
-                  <span className="text-sm font-medium">Esporta Dati</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-6 max-w-7xl mx-auto">
-            {renderContent()}
-          </div>
-        </main>
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-        <div className="grid grid-cols-5 gap-1 p-2">
-          {menuItems.slice(0, 5).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`flex flex-col items-center gap-1 py-2 rounded-lg transition-colors ${
-                activeSection === item.id
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-xs">{item.name.split(' ')[0]}</span>
-            </button>
-          ))}
-        </div>
       </nav>
-    </div>
-  )
-}
-
-// Componente Overview
-function OverviewSection({ 
-  userData, 
-  selectedExercise, 
-  setSelectedExercise 
-}: { 
-  userData: any, 
-  selectedExercise: ExerciseType,
-  setSelectedExercise: (exercise: ExerciseType) => void
-}) {
-  const exercises = [
-    { value: 'squat', label: 'Squat', icon: '🏋️' },
-    { value: 'bench-press', label: 'Panca Piana', icon: '💪' },
-    { value: 'deadlift', label: 'Stacco da Terra', icon: '⚡' }
-  ]
-
-  return (
-    <>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Bentornato, {userData.name}! 💪
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Ecco il tuo riepilogo fitness
-        </p>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <ChartBarIcon className="w-8 h-8 text-blue-600" />
-            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-              +12%
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{userData.totalWorkouts}</p>
-          <p className="text-sm text-gray-600">Allenamenti Totali</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <TrophyIcon className="w-8 h-8 text-yellow-600" />
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-              Livello 5
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{userData.achievements}</p>
-          <p className="text-sm text-gray-600">Achievement</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <SparklesIcon className="w-8 h-8 text-purple-600" />
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{userData.currentStreak}</p>
-          <p className="text-sm text-gray-600">Giorni di Streak 🔥</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <ShieldCheckIcon className="w-8 h-8 text-green-600" />
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{userData.perfectReps}</p>
-          <p className="text-sm text-gray-600">Rep Perfette</p>
-        </div>
-      </div>
-
-      {/* Quick Start with Exercise Selector */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white mb-8">
-        <h2 className="text-2xl font-bold mb-2">Pronto per allenarti?</h2>
-        <p className="mb-4 opacity-90">
-          Il tuo ultimo allenamento è stato {userData.lastWorkout}. Continuiamo il momentum!
-        </p>
-        
-        {/* Exercise Selector */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-white/80 mb-2">
-            Scegli l'esercizio:
-          </label>
-          <div className="flex gap-2 flex-wrap">
-            {exercises.map(exercise => (
-              <button
-                key={exercise.value}
-                onClick={() => setSelectedExercise(exercise.value as ExerciseType)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                  selectedExercise === exercise.value
-                    ? 'bg-white text-blue-600 scale-105'
-                    : 'bg-white/20 text-white hover:bg-white/30'
-                }`}
-              >
-                <span>{exercise.icon}</span>
-                <span>{exercise.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        
-        <Link 
-          href={`/exercises/${selectedExercise}`}
-          className="inline-flex items-center gap-2 bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-        >
-          Inizia {exercises.find(e => e.value === selectedExercise)?.label}
-          <SparklesIcon className="w-5 h-5" />
-        </Link>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Attività Recente</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg">🏋️</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">Squat</p>
-                <p className="text-sm text-gray-600">Oggi - 4 serie, 32 reps</p>
-              </div>
-            </div>
-            <span className="text-sm text-green-600 font-medium">95% Qualità</span>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg">💪</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">Panca Piana</p>
-                <p className="text-sm text-gray-600">Ieri - 5 serie, 25 reps</p>
-              </div>
-            </div>
-            <span className="text-sm text-green-600 font-medium">92% Qualità</span>
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg">⚡</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">Stacco</p>
-                <p className="text-sm text-gray-600">2 giorni fa - 3 serie, 15 reps</p>
-              </div>
-            </div>
-            <span className="text-sm text-yellow-600 font-medium">88% Qualità</span>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// Componente Settings
-function SettingsSection() {
-  return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Impostazioni</h2>
       
-      <div className="space-y-6">
-        {/* Account Settings */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Account</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input 
-                type="email" 
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="tuo@email.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-              <input 
-                type="text" 
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Il tuo nome"
-              />
+      {/* Main Content */}
+      <div className="flex h-screen pt-16">
+        {/* Sidebar */}
+        <div className="hidden md:flex md:flex-shrink-0">
+          <div className="flex flex-col w-64">
+            <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+              <div className="flex-grow flex flex-col">
+                <nav className="flex-1 px-2 py-4 bg-white space-y-1">
+                  {sidebarItems.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`/dashboard?section=${item.id}`}
+                      className={`
+                        group flex items-center px-2 py-2 text-sm font-medium rounded-md
+                        ${section === item.id 
+                          ? 'bg-blue-50 text-blue-600' 
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                      `}
+                    >
+                      <item.icon className={`
+                        mr-3 h-5 w-5
+                        ${section === item.id ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'}
+                      `} />
+                      {item.name}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
+              
+              {/* Sidebar Footer */}
+              <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
+                <div className="flex-shrink-0 w-full group block">
+                  <div className="flex items-center">
+                    <UserCircleIcon className="inline-block h-9 w-9 rounded-full text-gray-400" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-700">User</p>
+                      <p className="text-xs font-medium text-gray-500">View profile</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Notification Settings */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Notifiche</h3>
-          <div className="space-y-3">
-            <label className="flex items-center justify-between">
-              <span className="text-gray-700">Promemoria allenamento</span>
-              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
-            </label>
-            <label className="flex items-center justify-between">
-              <span className="text-gray-700">Achievement sbloccati</span>
-              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
-            </label>
-            <label className="flex items-center justify-between">
-              <span className="text-gray-700">Report settimanale</span>
-              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
-            </label>
-          </div>
-        </div>
-
-        {/* Data Management */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gestione Dati</h3>
-          <div className="space-y-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              <DocumentArrowDownIcon className="w-5 h-5" />
-              Esporta i miei dati
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-              <DocumentArrowUpIcon className="w-5 h-5" />
-              Importa dati
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
-              Cancella tutti i dati
-            </button>
-          </div>
+        
+        {/* Main Content Area */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <main className="flex-1 relative overflow-y-auto focus:outline-none">
+            <div className="py-6">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+                {renderContent()}
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     </div>
