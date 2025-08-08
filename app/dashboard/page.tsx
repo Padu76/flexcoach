@@ -1,349 +1,477 @@
-// app/dashboard/page.tsx - Dashboard principale con tutti i componenti integrati
-
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import Link from 'next/link'
 import { 
   HomeIcon,
   UserCircleIcon,
   ChartBarIcon,
   CalculatorIcon,
-  ShieldExclamationIcon,
-  PlayCircleIcon,
+  ShieldCheckIcon,
+  CogIcon,
+  BellIcon,
+  DocumentArrowDownIcon,
+  DocumentArrowUpIcon,
   TrophyIcon,
-  FireIcon,
-  CalendarIcon,
-  ArrowTrendingUpIcon,
-  BoltIcon,
-  SparklesIcon
+  SparklesIcon,
+  Cog6ToothIcon,
+  ArrowRightOnRectangleIcon,
+  Bars3Icon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
-// Import tutti i componenti
-import UserProfileSystem from '@/components/UserProfileSystem'
-import WeightPredictionSystem from '@/components/WeightPredictionSystem'
-import PerformanceDashboard from '@/components/PerformanceDashboard'
-import InjuryPreventionSystem from '@/components/InjuryPreventionSystem'
+// Import componenti (se esistono)
+import dynamic from 'next/dynamic'
+
+// Import dinamici per evitare errori SSR
+const UserProfileSystem = dynamic(() => import('@/components/UserProfileSystem'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento profilo...</div></div>
+})
+
+const PerformanceDashboard = dynamic(() => import('@/components/PerformanceDashboard'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento dashboard...</div></div>
+})
+
+const InjuryPreventionSystem = dynamic(() => import('@/components/InjuryPreventionSystem'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento sistema infortuni...</div></div>
+})
+
+const WeightPredictionSystem = dynamic(() => import('@/components/WeightPredictionSystem'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-12"><div className="text-gray-500">Caricamento predizione pesi...</div></div>
+})
 
 export default function DashboardPage() {
-  const [activeSection, setActiveSection] = useState<'overview' | 'profile' | 'performance' | 'injury' | 'weight'>('overview')
-  const [userStats, setUserStats] = useState({
-    totalWorkouts: 0,
-    weekStreak: 0,
-    totalReps: 0,
-    perfectReps: 0,
-    avgQuality: 0,
-    lastWorkout: '',
-    nextGoal: ''
+  const [activeSection, setActiveSection] = useState('overview')
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [userData, setUserData] = useState({
+    name: 'Atleta',
+    workoutsThisWeek: 3,
+    totalWorkouts: 42,
+    currentStreak: 7,
+    lastWorkout: 'Oggi',
+    perfectReps: 156,
+    totalVolume: '12,450 kg',
+    achievements: 8
   })
-  
-  const [quickActions] = useState([
-    { 
-      id: 'squat', 
-      label: 'Squat Training', 
-      icon: '🦵', 
-      color: 'blue',
-      link: '/exercises/squat/pre-workout'
-    },
-    { 
-      id: 'bench', 
-      label: 'Panca Piana', 
-      icon: '💪', 
-      color: 'green',
-      link: '/exercises/bench-press/pre-workout'
-    },
-    { 
-      id: 'deadlift', 
-      label: 'Stacco da Terra', 
-      icon: '🏋️', 
-      color: 'purple',
-      link: '/exercises/deadlift/pre-workout'
-    }
-  ])
-  
-  // Carica statistiche
+
+  // Check URL params per sezione
   useEffect(() => {
-    const sessions = JSON.parse(localStorage.getItem('flexcoach_sessions') || '[]')
-    const profile = JSON.parse(localStorage.getItem('flexcoach_profile_default') || '{}')
-    
-    if (sessions.length > 0) {
-      const totalReps = sessions.reduce((acc: number, s: any) => acc + s.totalReps, 0)
-      const perfectReps = sessions.reduce((acc: number, s: any) => acc + s.perfectReps, 0)
-      const avgQuality = sessions.reduce((acc: number, s: any) => acc + s.avgQuality, 0) / sessions.length
-      const lastSession = sessions[sessions.length - 1]
-      
-      setUserStats({
-        totalWorkouts: sessions.length,
-        weekStreak: calculateWeekStreak(sessions),
-        totalReps,
-        perfectReps,
-        avgQuality,
-        lastWorkout: new Date(lastSession.date).toLocaleDateString(),
-        nextGoal: profile.goals?.primaryGoal || 'strength'
-      })
+    const params = new URLSearchParams(window.location.search)
+    const section = params.get('section')
+    if (section) {
+      setActiveSection(section)
     }
   }, [])
-  
-  const calculateWeekStreak = (sessions: any[]): number => {
-    // Calcola settimane consecutive di allenamento
-    const weeks = new Set()
-    sessions.forEach((s: any) => {
-      const date = new Date(s.date)
-      const weekNum = Math.floor(date.getTime() / (7 * 24 * 60 * 60 * 1000))
-      weeks.add(weekNum)
-    })
-    return weeks.size
+
+  const menuItems = [
+    { id: 'overview', name: 'Panoramica', icon: HomeIcon },
+    { id: 'profile', name: 'Profilo', icon: UserCircleIcon },
+    { id: 'performance', name: 'Performance', icon: ChartBarIcon },
+    { id: 'weight-calculator', name: 'Calcolo Pesi', icon: CalculatorIcon },
+    { id: 'injury-prevention', name: 'Prevenzione Infortuni', icon: ShieldCheckIcon },
+    { id: 'settings', name: 'Impostazioni', icon: CogIcon },
+  ]
+
+  const renderContent = () => {
+    switch(activeSection) {
+      case 'profile':
+        return <UserProfileSystem />
+      
+      case 'performance':
+        return <PerformanceDashboard />
+      
+      case 'injury-prevention':
+        return <InjuryPreventionSystem />
+      
+      case 'weight-calculator':
+        return <WeightPredictionSystem />
+      
+      case 'settings':
+        return <SettingsSection />
+      
+      case 'overview':
+      default:
+        return <OverviewSection userData={userData} />
+    }
   }
-  
-  const getCurrentTime = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Buongiorno'
-    if (hour < 18) return 'Buon pomeriggio'
-    return 'Buonasera'
-  }
-  
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50">
+      {/* Header Navigation */}
+      <header className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md shadow-sm z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="text-2xl font-bold text-gray-900 flex items-center gap-2 hover:text-blue-600 transition-colors">
-                <FireIcon className="w-6 h-6 text-orange-500" />
+            {/* Logo - Sempre Cliccabile */}
+            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                <span className="text-white font-bold text-xl">F</span>
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 FlexCoach AI
+              </span>
+            </Link>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/" className="text-gray-600 hover:text-gray-900 transition-colors">
+                Home
               </Link>
-              
-              {/* Navigation */}
-              <nav className="hidden md:flex gap-6">
-                {[
-                  { id: 'overview', label: 'Overview', icon: HomeIcon },
-                  { id: 'profile', label: 'Profilo', icon: UserCircleIcon },
-                  { id: 'performance', label: 'Performance', icon: ChartBarIcon },
-                  { id: 'injury', label: 'Prevenzione', icon: ShieldExclamationIcon },
-                  { id: 'weight', label: 'Calcolo Peso', icon: CalculatorIcon }
-                ].map(item => (
+              <Link href="/exercises" className="text-gray-600 hover:text-gray-900 transition-colors">
+                Esercizi
+              </Link>
+              <Link href="/dashboard" className="text-gray-900 font-medium">
+                Dashboard
+              </Link>
+              <Link href="/dashboard?section=profile" className="text-gray-600 hover:text-gray-900 transition-colors">
+                Profilo
+              </Link>
+            </nav>
+
+            {/* Desktop Right Menu */}
+            <div className="hidden md:flex items-center gap-2">
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
+                <BellIcon className="w-5 h-5 text-gray-600" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </button>
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <UserCircleIcon className="w-5 h-5 text-gray-600" />
+              </button>
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <Cog6ToothIcon className="w-5 h-5 text-gray-600" />
+              </button>
+              <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <ArrowRightOnRectangleIcon className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {isMobileMenuOpen ? (
+                <XMarkIcon className="w-6 h-6 text-gray-600" />
+              ) : (
+                <Bars3Icon className="w-6 h-6 text-gray-600" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-200">
+            <div className="px-4 py-2 space-y-1">
+              <Link 
+                href="/" 
+                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link 
+                href="/exercises" 
+                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Esercizi
+              </Link>
+              <Link 
+                href="/dashboard" 
+                className="block px-3 py-2 rounded-lg bg-blue-50 text-blue-600 font-medium"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <Link 
+                href="/dashboard?section=profile" 
+                className="block px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Profilo
+              </Link>
+              <div className="border-t border-gray-200 mt-2 pt-2">
+                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2">
+                  <BellIcon className="w-5 h-5" />
+                  Notifiche
+                  <span className="ml-auto w-2 h-2 bg-red-500 rounded-full"></span>
+                </button>
+                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+                  Impostazioni
+                </button>
+                <button className="w-full text-left px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Main Layout */}
+      <div className="flex h-screen pt-16">
+        {/* Sidebar - Desktop */}
+        <aside className="hidden md:flex md:w-64 bg-white shadow-sm">
+          <div className="flex flex-col w-full">
+            <div className="p-4">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+                Menu Dashboard
+              </h2>
+              <nav className="space-y-1">
+                {menuItems.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setActiveSection(item.id as any)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    onClick={() => setActiveSection(item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                       activeSection === item.id
                         ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-600 hover:text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
+                    <item.icon className="w-5 h-5" />
+                    <span className="font-medium">{item.name}</span>
                   </button>
                 ))}
               </nav>
             </div>
-            
-            <div className="flex items-center gap-4">
-              <nav className="hidden md:flex gap-6 mr-6">
-                <Link href="/" className="text-gray-600 hover:text-gray-900">
-                  Home
-                </Link>
-                <Link href="/exercises" className="text-gray-600 hover:text-gray-900">
-                  Esercizi
-                </Link>
-                <Link href="/dashboard?section=profile" className="text-gray-600 hover:text-gray-900">
-                  Profilo
-                </Link>
-              </nav>
-              <Link
-                href="/exercises"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-              >
-                <PlayCircleIcon className="w-5 h-5 inline mr-2" />
-                Inizia Training
-              </Link>
+
+            {/* Quick Actions */}
+            <div className="p-4 mt-auto border-t">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Azioni Rapide
+              </h3>
+              <div className="space-y-2">
+                <button className="w-full flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <SparklesIcon className="w-5 h-5" />
+                  <span className="text-sm font-medium">Nuovo Allenamento</span>
+                </button>
+                <button className="w-full flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                  <DocumentArrowDownIcon className="w-5 h-5" />
+                  <span className="text-sm font-medium">Esporta Dati</span>
+                </button>
+              </div>
             </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6 max-w-7xl mx-auto">
+            {renderContent()}
+          </div>
+        </main>
+      </div>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+        <div className="grid grid-cols-5 gap-1 p-2">
+          {menuItems.slice(0, 5).map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveSection(item.id)}
+              className={`flex flex-col items-center gap-1 py-2 rounded-lg transition-colors ${
+                activeSection === item.id
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-gray-600'
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-xs">{item.name.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+// Componente Overview
+function OverviewSection({ userData }: { userData: any }) {
+  return (
+    <>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Bentornato, {userData.name}! 💪
+        </h1>
+        <p className="text-gray-600 mt-1">
+          Ecco il tuo riepilogo fitness
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <ChartBarIcon className="w-8 h-8 text-blue-600" />
+            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+              +12%
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{userData.totalWorkouts}</p>
+          <p className="text-sm text-gray-600">Allenamenti Totali</p>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <TrophyIcon className="w-8 h-8 text-yellow-600" />
+            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+              Livello 5
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{userData.achievements}</p>
+          <p className="text-sm text-gray-600">Achievement</p>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <SparklesIcon className="w-8 h-8 text-purple-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{userData.currentStreak}</p>
+          <p className="text-sm text-gray-600">Giorni di Streak 🔥</p>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <ShieldCheckIcon className="w-8 h-8 text-green-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{userData.perfectReps}</p>
+          <p className="text-sm text-gray-600">Rep Perfette</p>
+        </div>
+      </div>
+
+      {/* Quick Start */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white mb-8">
+        <h2 className="text-2xl font-bold mb-2">Pronto per allenarti?</h2>
+        <p className="mb-4 opacity-90">
+          Il tuo ultimo allenamento è stato {userData.lastWorkout}. Continuiamo il momentum!
+        </p>
+        <Link 
+          href="/exercises" 
+          className="inline-flex items-center gap-2 bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+        >
+          Inizia Allenamento
+          <SparklesIcon className="w-5 h-5" />
+        </Link>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Attività Recente</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="text-lg">🏋️</span>
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">Squat</p>
+                <p className="text-sm text-gray-600">Oggi - 4 serie, 32 reps</p>
+              </div>
+            </div>
+            <span className="text-sm text-green-600 font-medium">95% Qualità</span>
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="text-lg">💪</span>
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">Panca Piana</p>
+                <p className="text-sm text-gray-600">Ieri - 5 serie, 25 reps</p>
+              </div>
+            </div>
+            <span className="text-sm text-green-600 font-medium">92% Qualità</span>
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <span className="text-lg">⚡</span>
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">Stacco</p>
+                <p className="text-sm text-gray-600">2 giorni fa - 3 serie, 15 reps</p>
+              </div>
+            </div>
+            <span className="text-sm text-yellow-600 font-medium">88% Qualità</span>
           </div>
         </div>
       </div>
+    </>
+  )
+}
+
+// Componente Settings
+function SettingsSection() {
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">Impostazioni</h2>
       
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Overview Section */}
-        {activeSection === 'overview' && (
-          <div className="space-y-6">
-            {/* Welcome Hero */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white">
-              <h2 className="text-3xl font-bold mb-2">
-                {getCurrentTime()}! 👋
-              </h2>
-              <p className="text-blue-100 mb-6">
-                Pronto per superare i tuoi limiti oggi?
-              </p>
-              
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white/20 backdrop-blur rounded-lg p-4">
-                  <div className="text-3xl font-bold">{userStats.totalWorkouts}</div>
-                  <div className="text-sm text-blue-100">Allenamenti</div>
-                </div>
-                <div className="bg-white/20 backdrop-blur rounded-lg p-4">
-                  <div className="text-3xl font-bold">{userStats.weekStreak}</div>
-                  <div className="text-sm text-blue-100">Settimane Streak</div>
-                </div>
-                <div className="bg-white/20 backdrop-blur rounded-lg p-4">
-                  <div className="text-3xl font-bold">{userStats.totalReps}</div>
-                  <div className="text-sm text-blue-100">Ripetizioni Totali</div>
-                </div>
-                <div className="bg-white/20 backdrop-blur rounded-lg p-4">
-                  <div className="text-3xl font-bold">{userStats.avgQuality.toFixed(0)}%</div>
-                  <div className="text-sm text-blue-100">Qualità Media</div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Quick Actions */}
+      <div className="space-y-6">
+        {/* Account Settings */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Account</h3>
+          <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <BoltIcon className="w-5 h-5 text-yellow-500" />
-                Avvia Allenamento Rapido
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {quickActions.map(action => (
-                  <Link
-                    key={action.id}
-                    href={action.link}
-                    className={`bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-all transform hover:scale-[1.02] border-l-4 border-${action.color}-500`}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-4xl">{action.icon}</div>
-                      <ArrowTrendingUpIcon className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900">{action.label}</h4>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Inizia con calcolo peso AI
-                    </p>
-                  </Link>
-                ))}
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input 
+                type="email" 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="tuo@email.com"
+              />
             </div>
-            
-            {/* Recent Activity */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-blue-600" />
-                Attività Recente
-              </h3>
-              
-              <div className="space-y-3">
-                {userStats.lastWorkout && (
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      <div>
-                        <div className="font-medium text-gray-900">Ultimo Allenamento</div>
-                        <div className="text-sm text-gray-600">{userStats.lastWorkout}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {userStats.perfectReps} reps perfette
-                    </div>
-                  </div>
-                )}
-                
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <TrophyIcon className="w-5 h-5 text-blue-600" />
-                    <div>
-                      <div className="font-medium text-gray-900">Prossimo Obiettivo</div>
-                      <div className="text-sm text-gray-600 capitalize">{userStats.nextGoal}</div>
-                    </div>
-                  </div>
-                  <Link
-                    href="/dashboard?section=goals"
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    Vedi progressi →
-                  </Link>
-                </div>
-              </div>
-            </div>
-            
-            {/* AI Insights */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <SparklesIcon className="w-5 h-5 text-purple-600" />
-                Insights AI Personalizzati
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-lg p-4">
-                  <div className="text-sm font-medium text-purple-900 mb-2">
-                    💡 Suggerimento del Giorno
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    Basato sui tuoi ultimi allenamenti, oggi focus su mobilità caviglie prima dello squat.
-                  </p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-4">
-                  <div className="text-sm font-medium text-purple-900 mb-2">
-                    📈 Trend Settimanale
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    La tua forma è migliorata del 12% questa settimana. Ottimo lavoro!
-                  </p>
-                </div>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+              <input 
+                type="text" 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Il tuo nome"
+              />
             </div>
           </div>
-        )}
-        
-        {/* Profile Section */}
-        {activeSection === 'profile' && (
-          <UserProfileSystem 
-            userId="default"
-            onProfileUpdate={(profile) => console.log('Profile updated:', profile)}
-            onCalibrationComplete={() => console.log('Calibration complete')}
-          />
-        )}
-        
-        {/* Performance Section */}
-        {activeSection === 'performance' && (
-          <PerformanceDashboard 
-            exerciseType="squat"
-            isLive={false}
-          />
-        )}
-        
-        {/* Injury Prevention Section */}
-        {activeSection === 'injury' && (
-          <InjuryPreventionSystem 
-            exerciseType="squat"
-            isLive={false}
-            onRiskDetected={(risk) => console.log('Risk detected:', risk)}
-          />
-        )}
-        
-        {/* Weight Calculation Section */}
-        {activeSection === 'weight' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Seleziona Esercizio per Calcolo Peso
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {['squat', 'bench-press', 'deadlift'].map(exercise => (
-                  <div key={exercise} className="border rounded-lg p-4">
-                    <WeightPredictionSystem 
-                      exerciseType={exercise as any}
-                      onStartWorkout={(plan, weight) => {
-                        console.log(`Starting ${exercise} with ${weight}kg`)
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
+        </div>
+
+        {/* Notification Settings */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Notifiche</h3>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between">
+              <span className="text-gray-700">Promemoria allenamento</span>
+              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
+            </label>
+            <label className="flex items-center justify-between">
+              <span className="text-gray-700">Achievement sbloccati</span>
+              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
+            </label>
+            <label className="flex items-center justify-between">
+              <span className="text-gray-700">Report settimanale</span>
+              <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" defaultChecked />
+            </label>
           </div>
-        )}
+        </div>
+
+        {/* Data Management */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gestione Dati</h3>
+          <div className="space-y-3">
+            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <DocumentArrowDownIcon className="w-5 h-5" />
+              Esporta i miei dati
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+              <DocumentArrowUpIcon className="w-5 h-5" />
+              Importa dati
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
+              Cancella tutti i dati
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
