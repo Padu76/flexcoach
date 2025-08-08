@@ -82,12 +82,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const totalRepsSession = useRef(0)
   const perfectRepsCount = useRef(0)
   
-  // Sound feedback hook - SEMPLIFICATO
+  // Sound feedback hook - SOLO quello che esiste davvero
   const { 
-    playBeep, 
-    playSuccess, 
-    playWarning,
-    playMilestone 
+    playBeep,
+    sounds
   } = useSoundFeedback(audioEnabled)
   
   // Inizializza workout quando si avvia
@@ -166,7 +164,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
         
         if (result.success) {
           console.log('Workout saved successfully')
-          playSuccess()
+          if (sounds?.start) sounds.start()
         } else {
           console.error('Failed to save workout:', result.error)
         }
@@ -183,7 +181,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       console.log('Starting workout')
       setIsRunning(true)
       setIsPaused(false)
-      playSuccess()
+      if (sounds?.start) sounds.start()
     }
   }
   
@@ -201,7 +199,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     setSessionVolume(0)
     totalRepsSession.current = 0
     perfectRepsCount.current = 0
-    playSuccess()
+    if (sounds?.start) sounds.start()
   }
   
   // SIMULAZIONE conteggio reps per test
@@ -219,7 +217,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     
     // Check milestones
     if ((repsCount + 1) % 5 === 0) {
-      playMilestone()
+      if (sounds?.cinqueReps) sounds.cinqueReps()
+    }
+    if ((repsCount + 1) % 10 === 0) {
+      if (sounds?.dieciReps) sounds.dieciReps()
     }
     
     // Simula rep perfetta
