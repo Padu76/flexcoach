@@ -1,27 +1,23 @@
-// components/PerformanceDashboard.tsx - Dashboard con DataManager integrato
+// components/PerformanceDashboard.tsx - Dashboard SEMPLIFICATA e FUNZIONANTE
 
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { 
   useWorkoutHistory,
   useStatistics,
   useAchievements,
-  useDataManager,
-  useCurrentWorkout
+  useDataManager
 } from '@/hooks/useDataManager'
 import { 
   ChartBarIcon,
   FireIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
   ClockIcon,
   CheckCircleIcon,
   TrophyIcon,
   CalendarIcon,
   ScaleIcon,
   ExclamationTriangleIcon,
-  ArrowPathIcon,
   DocumentArrowDownIcon
 } from '@heroicons/react/24/outline'
 import type { ExerciseType } from '@/types'
@@ -31,12 +27,11 @@ interface Props {
 }
 
 export default function PerformanceDashboard({ exerciseType }: Props) {
-  // DataManager Hooks
+  // DataManager Hooks - SOLO quello che esiste sicuramente
   const { 
     sessions,
     lastWorkout,
-    bestWorkout,
-    getSessionsByDateRange
+    bestWorkout
   } = useWorkoutHistory({ 
     exercise: exerciseType, 
     limit: 30 
@@ -44,12 +39,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
   
   const { 
     stats,
-    exerciseStats,
-    weeklyProgress,
-    totalWorkouts,
-    totalVolume,
-    totalReps,
-    currentStreak
+    exerciseStats
   } = useStatistics(exerciseType)
   
   const {
@@ -60,14 +50,13 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
   } = useAchievements()
   
   const { exportData } = useDataManager()
-  const { session: currentSession, isActive } = useCurrentWorkout()
   
   // Stati locali
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'all'>('week')
   const [selectedSession, setSelectedSession] = useState<any>(null)
   const [showDetails, setShowDetails] = useState(false)
   
-  // Calcola statistiche periodo
+  // Calcola statistiche periodo SEMPLIFICATO
   const getPeriodStats = () => {
     const now = new Date()
     let startDate = new Date()
@@ -80,7 +69,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
         startDate.setMonth(now.getMonth() - 1)
         break
       default:
-        startDate = new Date(0) // Dall'inizio
+        startDate = new Date(0)
     }
     
     const periodSessions = sessions.filter(s => 
@@ -89,49 +78,15 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
     
     const totalVolumePeriod = periodSessions.reduce((acc, s) => acc + s.totalVolume, 0)
     const totalRepsPeriod = periodSessions.reduce((acc, s) => acc + s.totalReps, 0)
-    const avgQualityPeriod = periodSessions.length > 0
-      ? periodSessions.reduce((acc, s) => acc + (s.perfectReps / s.totalReps * 100), 0) / periodSessions.length
-      : 0
     
     return {
       sessions: periodSessions.length,
       volume: totalVolumePeriod,
-      reps: totalRepsPeriod,
-      avgQuality: avgQualityPeriod
+      reps: totalRepsPeriod
     }
   }
   
   const periodStats = getPeriodStats()
-  
-  // Calcola trend
-  const calculateTrend = () => {
-    if (sessions.length < 2) return 'stable'
-    
-    const recent = sessions.slice(0, 5)
-    const older = sessions.slice(5, 10)
-    
-    if (older.length === 0) return 'stable'
-    
-    const recentAvg = recent.reduce((acc, s) => acc + s.totalVolume, 0) / recent.length
-    const olderAvg = older.reduce((acc, s) => acc + s.totalVolume, 0) / older.length
-    
-    if (recentAvg > olderAvg * 1.1) return 'up'
-    if (recentAvg < olderAvg * 0.9) return 'down'
-    return 'stable'
-  }
-  
-  const trend = calculateTrend()
-  
-  // Prepara dati per grafico
-  const chartData = sessions
-    .slice(0, 10)
-    .reverse()
-    .map(s => ({
-      date: new Date(s.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }),
-      volume: s.totalVolume,
-      reps: s.totalReps,
-      quality: Math.round((s.perfectReps / s.totalReps) * 100)
-    }))
   
   const getExerciseName = () => {
     switch (exerciseType) {
@@ -141,17 +96,6 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
       default: return 'Esercizio'
     }
   }
-  
-  const getExerciseColor = () => {
-    switch (exerciseType) {
-      case 'squat': return 'blue'
-      case 'bench-press': return 'green'
-      case 'deadlift': return 'orange'
-      default: return 'gray'
-    }
-  }
-  
-  const color = getExerciseColor()
   
   return (
     <div className="w-full max-w-7xl mx-auto p-4 space-y-6">
@@ -164,7 +108,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
               Performance Dashboard - {getExerciseName()}
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Analizza i tuoi progressi e migliora la tua tecnica
+              Analizza i tuoi progressi
             </p>
           </div>
           
@@ -173,7 +117,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <DocumentArrowDownIcon className="w-5 h-5" />
-            Esporta Dati
+            Esporta
           </button>
         </div>
         
@@ -183,7 +127,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
             onClick={() => setSelectedPeriod('week')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               selectedPeriod === 'week'
-                ? `bg-${color}-600 text-white`
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -193,7 +137,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
             onClick={() => setSelectedPeriod('month')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               selectedPeriod === 'month'
-                ? `bg-${color}-600 text-white`
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -203,7 +147,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
             onClick={() => setSelectedPeriod('all')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               selectedPeriod === 'all'
-                ? `bg-${color}-600 text-white`
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -213,33 +157,29 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
       </div>
       
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Sessioni</p>
               <p className="text-2xl font-bold text-gray-900">{periodStats.sessions}</p>
               <p className="text-xs text-gray-500">
-                {selectedPeriod === 'week' ? 'questa settimana' : 
-                 selectedPeriod === 'month' ? 'questo mese' : 'totali'}
+                {selectedPeriod === 'week' ? 'settimana' : 
+                 selectedPeriod === 'month' ? 'mese' : 'totali'}
               </p>
             </div>
-            <CalendarIcon className={`w-8 h-8 text-${color}-500`} />
+            <CalendarIcon className="w-8 h-8 text-blue-500" />
           </div>
         </div>
         
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Volume Totale</p>
-              <p className="text-2xl font-bold text-gray-900">{periodStats.volume} kg</p>
-              <p className="text-xs text-gray-500">
-                {trend === 'up' && <span className="text-green-600">↑ In crescita</span>}
-                {trend === 'down' && <span className="text-red-600">↓ In calo</span>}
-                {trend === 'stable' && <span className="text-gray-600">→ Stabile</span>}
-              </p>
+              <p className="text-sm text-gray-600">Volume</p>
+              <p className="text-2xl font-bold text-gray-900">{periodStats.volume}</p>
+              <p className="text-xs text-gray-500">kg totali</p>
             </div>
-            <ScaleIcon className={`w-8 h-8 text-${color}-500`} />
+            <ScaleIcon className="w-8 h-8 text-green-500" />
           </div>
         </div>
         
@@ -248,75 +188,12 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
             <div>
               <p className="text-sm text-gray-600">Ripetizioni</p>
               <p className="text-2xl font-bold text-gray-900">{periodStats.reps}</p>
-              <p className="text-xs text-gray-500">
-                Media: {periodStats.sessions > 0 ? Math.round(periodStats.reps / periodStats.sessions) : 0}/sessione
-              </p>
+              <p className="text-xs text-gray-500">totali</p>
             </div>
-            <FireIcon className={`w-8 h-8 text-${color}-500`} />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Qualità Media</p>
-              <p className="text-2xl font-bold text-gray-900">{Math.round(periodStats.avgQuality)}%</p>
-              <p className="text-xs text-gray-500">
-                {periodStats.avgQuality > 80 ? 
-                  <span className="text-green-600">Ottima forma</span> :
-                  periodStats.avgQuality > 60 ?
-                  <span className="text-yellow-600">Buona forma</span> :
-                  <span className="text-red-600">Da migliorare</span>
-                }
-              </p>
-            </div>
-            <CheckCircleIcon className={`w-8 h-8 text-${color}-500`} />
+            <FireIcon className="w-8 h-8 text-orange-500" />
           </div>
         </div>
       </div>
-      
-      {/* Progress Chart */}
-      {chartData.length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Progressi nel Tempo
-          </h3>
-          
-          {/* Simple Bar Chart */}
-          <div className="space-y-4">
-            {chartData.map((data, idx) => (
-              <div key={idx} className="flex items-center gap-4">
-                <div className="w-20 text-sm text-gray-600">{data.date}</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="text-sm text-gray-700">Volume:</div>
-                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                      <div 
-                        className={`bg-${color}-500 h-4 rounded-full`}
-                        style={{ width: `${(data.volume / Math.max(...chartData.map(d => d.volume))) * 100}%` }}
-                      />
-                    </div>
-                    <div className="text-sm font-medium w-16 text-right">{data.volume}kg</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm text-gray-700">Qualità:</div>
-                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                      <div 
-                        className={`h-4 rounded-full ${
-                          data.quality > 80 ? 'bg-green-500' :
-                          data.quality > 60 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${data.quality}%` }}
-                      />
-                    </div>
-                    <div className="text-sm font-medium w-16 text-right">{data.quality}%</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       
       {/* Recent Sessions */}
       <div className="bg-white rounded-lg shadow-lg p-6">
@@ -338,28 +215,15 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-gray-900">
-                      {new Date(session.date).toLocaleDateString('it-IT', { 
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long'
-                      })}
+                      {new Date(session.date).toLocaleDateString('it-IT')}
                     </div>
                     <div className="text-sm text-gray-600 mt-1">
-                      {session.totalReps} reps • {session.totalVolume} kg totali
+                      {session.totalReps} reps • {session.totalVolume} kg
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      (session.perfectReps / session.totalReps) > 0.8 
-                        ? 'bg-green-100 text-green-800'
-                        : (session.perfectReps / session.totalReps) > 0.6
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {Math.round((session.perfectReps / session.totalReps) * 100)}% qualità
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {session.duration ? `${Math.round(session.duration / 60)} min` : '-'}
+                    <div className="text-sm text-gray-600">
+                      Qualità: {Math.round((session.perfectReps / session.totalReps) * 100)}%
                     </div>
                   </div>
                 </div>
@@ -368,7 +232,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
-            Nessuna sessione registrata per {getExerciseName()}
+            Nessuna sessione registrata
           </div>
         )}
       </div>
@@ -382,7 +246,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
               Achievements
             </h3>
             <div className="text-sm text-gray-600">
-              {unlockedCount}/{totalCount} sbloccati ({completionPercentage}%)
+              {unlockedCount}/{totalCount} ({completionPercentage}%)
             </div>
           </div>
           
@@ -398,11 +262,6 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
               >
                 <div className="text-2xl mb-1">{achievement.icon}</div>
                 <div className="text-xs font-medium text-gray-900">{achievement.name}</div>
-                {achievement.unlockedAt && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    {new Date(achievement.unlockedAt).toLocaleDateString('it-IT')}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -419,9 +278,9 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
               </h3>
               <button
                 onClick={() => setShowDetails(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 text-2xl"
               >
-                ✕
+                ×
               </button>
             </div>
             
@@ -430,18 +289,7 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
                 <div>
                   <div className="text-sm text-gray-600">Data</div>
                   <div className="font-medium">
-                    {new Date(selectedSession.date).toLocaleDateString('it-IT', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">Durata</div>
-                  <div className="font-medium">
-                    {selectedSession.duration ? `${Math.round(selectedSession.duration / 60)} minuti` : 'N/D'}
+                    {new Date(selectedSession.date).toLocaleDateString('it-IT')}
                   </div>
                 </div>
                 <div>
@@ -449,37 +297,16 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
                   <div className="font-medium">{selectedSession.totalVolume} kg</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600">Ripetizioni Totali</div>
+                  <div className="text-sm text-gray-600">Ripetizioni</div>
                   <div className="font-medium">{selectedSession.totalReps}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600">Reps Perfette</div>
-                  <div className="font-medium">{selectedSession.perfectReps}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">Qualità Media</div>
+                  <div className="text-sm text-gray-600">Qualità</div>
                   <div className="font-medium">
                     {Math.round((selectedSession.perfectReps / selectedSession.totalReps) * 100)}%
                   </div>
                 </div>
               </div>
-              
-              {selectedSession.sets && selectedSession.sets.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Serie Completate</h4>
-                  <div className="space-y-2">
-                    {selectedSession.sets.map((set: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                        <span>Set {idx + 1}</span>
-                        <span>{set.reps?.length || 0} reps @ {set.weight || 0}kg</span>
-                        <span className="text-sm text-gray-600">
-                          Qualità: {set.averageQuality || 0}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
             
             <div className="mt-6 flex justify-end">
@@ -501,12 +328,9 @@ export default function PerformanceDashboard({ exerciseType }: Props) {
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
             Nessun dato disponibile
           </h3>
-          <p className="text-gray-600 mb-4">
-            Inizia ad allenarti con {getExerciseName()} per vedere le tue statistiche!
+          <p className="text-gray-600">
+            Inizia ad allenarti per vedere le statistiche!
           </p>
-          <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Inizia Allenamento
-          </button>
         </div>
       )}
     </div>
