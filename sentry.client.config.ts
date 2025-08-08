@@ -6,9 +6,9 @@ Sentry.init({
   // Traccia il 100% degli errori in produzione, 10% in dev
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 1.0 : 0.1,
   
-  // Session Replay - registra video della sessione quando c'è un errore
-  replaysOnErrorSampleRate: 1.0, // 100% quando c'è errore
-  replaysSessionSampleRate: 0.1, // 10% sessioni normali
+  // Registra video quando c'è errore (100% su errori, 10% sessioni normali)
+  replaysOnErrorSampleRate: 1.0,
+  replaysSessionSampleRate: 0.1,
   
   // Ambiente
   environment: process.env.NODE_ENV,
@@ -16,90 +16,67 @@ Sentry.init({
   // Integrations
   integrations: [
     new Sentry.Replay({
-      maskAllText: false, // Non mascherare testo (utile per debug)
-      blockAllMedia: false, // Non bloccare media (vogliamo vedere video webcam)
-      maskAllInputs: true, // Maschera password e input sensibili
+      // Maschera testo sensibile
+      maskAllText: false,
+      maskAllInputs: true,
       
-      // Opzioni privacy
-      privacy: {
-        maskTextFn: (text, element) => {
-          // Maschera solo elementi con classe "sensitive"
-          if (element?.classList?.contains('sensitive')) {
-            return '[REDACTED]';
-          }
-          return text;
-        },
-      },
-    }),
-    
-    // Browser Tracing per performance
-    new Sentry.BrowserTracing({
-      // Traccia navigazione e fetch
-      routingInstrumentation: Sentry.nextRouterInstrumentation,
-      
-      // Traccia specificamente le chiamate AI
-      tracePropagationTargets: [
-        'localhost',
-        /^https:\/\/cdn\.jsdelivr\.net/, // TensorFlow CDN
-        /^https:\/\/.*\.tensorflow\.org/,
-        /^\/api/,
-      ],
+      // Non bloccare media per vedere video workout
+      blockAllMedia: false,
     }),
   ],
   
-  // Performance Monitoring
-  profilesSampleRate: 1.0, // Profiling performance
-  
-  // Filtra errori non importanti
+  // Ignora alcuni errori comuni non critici
   ignoreErrors: [
-    // Errori browser comuni
+    // Errori di rete
+    'NetworkError',
+    'Failed to fetch',
+    
+    // Errori browser extensions
+    'chrome-extension://',
+    'moz-extension://',
+    
+    // Errori ResizeObserver comuni in React
     'ResizeObserver loop limit exceeded',
     'ResizeObserver loop completed with undelivered notifications',
-    'Non-Error promise rejection captured',
     
-    // Errori di rete non critici
-    /Failed to fetch/,
-    /NetworkError/,
-    /Load failed/,
+    // Errori comuni non critici
+    'Non-Error promise rejection captured',
   ],
   
-  // Before send - personalizza prima di inviare
+  // Filtra transazioni per performance
+  tracesSampler: (samplingContext) => {
+    // Sempre traccia errori
+    if (samplingContext.parentSampled === true) {
+      return 1.0;
+    }
+    
+    // Traccia meno le route statiche
+    if (samplingContext.location?.pathname === '/') {
+      return 0.1;
+    }
+    
+    // Traccia di più le route critiche
+    if (samplingContext.location?.pathname?.includes('/exercises')) {
+      return 1.0;
+    }
+    
+    // Default
+    return 0.5;
+  },
+  
+  // Before send per filtrare/modificare eventi
   beforeSend(event, hint) {
-    // Log in console in development
+    // In development, logga su console
     if (process.env.NODE_ENV === 'development') {
       console.error('Sentry Event:', event);
       console.error('Error:', hint.originalException || hint.syntheticException);
     }
     
-    // Aggiungi context FlexCoach
-    if (event.contexts) {
-      event.contexts.flexcoach = {
-        version: '1.0.0',
-        feature: window.location.pathname.includes('/exercises') ? 'exercise' : 
-                 window.location.pathname.includes('/trainer') ? 'trainer' : 
-                 window.location.pathname.includes('/dashboard') ? 'dashboard' : 'other',
-      };
-    }
-    
-    // Non inviare errori in localhost (opzionale)
-    if (window.location.hostname === 'localhost') {
-      return null; // Commenta questa riga se vuoi errori anche in dev
+    // Filtra errori di permission denied per webcam (comuni)
+    if (event.exception?.values?.[0]?.value?.includes('Permission denied')) {
+      return null; // Non inviare a Sentry
     }
     
     return event;
   },
-  
-  // Tags globali
-  initialScope: {
-    tags: {
-      app: 'flexcoach',
-      component: 'client',
-    },
-    user: {
-      // Popolato dinamicamente quando user fa login
-    },
-  },
-  
-  // Debug mode (solo in dev)
-  debug: process.env.NODE_ENV === 'development',
 });
