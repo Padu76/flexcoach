@@ -6,8 +6,8 @@ import { useState, useEffect, useRef } from 'react'
 import { 
   ChartBarIcon,
   FireIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
   ClockIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -489,8 +489,8 @@ export default function PerformanceDashboard({
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
               <FireIcon className="w-5 h-5 text-blue-600" />
-              {stats.trend === 'up' ? <TrendingUpIcon className="w-4 h-4 text-green-500" /> :
-               stats.trend === 'down' ? <TrendingDownIcon className="w-4 h-4 text-red-500" /> :
+              {stats.trend === 'up' ? <ArrowTrendingUpIcon className="w-4 h-4 text-green-500" /> :
+               stats.trend === 'down' ? <ArrowTrendingDownIcon className="w-4 h-4 text-red-500" /> :
                <span className="w-4 h-4">➡️</span>}
             </div>
             <div className="text-2xl font-bold text-gray-900">{stats.totalReps}</div>
