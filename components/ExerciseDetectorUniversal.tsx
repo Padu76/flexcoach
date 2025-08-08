@@ -109,8 +109,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       console.log('Saving set:', { reps: currentSetCount, weight: currentWeight, quality })
       
       const result = addSet({
+        setNumber: 1, // Numero del set
+        exercise: exerciseType,
+        targetReps: currentSetCount,
+        completedReps: currentSetCount,
         reps: Array(currentSetCount).fill({ quality: formQuality }),
         weight: currentWeight,
+        averageQuality: formQuality,
         restTime: 0
       })
       
