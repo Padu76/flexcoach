@@ -1,8 +1,9 @@
-// components/UserProfileSystem.tsx - Sistema profilo utente completo con calibrazione
+// components/UserProfileSystem.tsx - Sistema profilo utente con DataManager integrato
 
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useUserProfile, useCalibration, useDataManager } from '@/hooks/useDataManager'
 import { 
   UserCircleIcon,
   CameraIcon,
@@ -20,125 +21,10 @@ import {
   SparklesIcon,
   ShieldCheckIcon,
   DocumentTextIcon,
-  BeakerIcon
+  BeakerIcon,
+  DocumentArrowDownIcon,
+  DocumentArrowUpIcon
 } from '@heroicons/react/24/outline'
-
-// Tipi per profilo utente
-interface PhysicalProfile {
-  // Dati base
-  age: number
-  gender: 'male' | 'female' | 'other'
-  height: number // cm
-  weight: number // kg
-  bodyFat?: number // %
-  muscleMass?: number // kg
-  
-  // Misure corporee
-  wingspan?: number // cm
-  legLength?: number // cm
-  torsoLength?: number // cm
-  shoulderWidth?: number // cm
-  hipWidth?: number // cm
-  
-  // Mobilità articolare (gradi)
-  ankleFlexion: number
-  hipFlexion: number
-  shoulderFlexion: number
-  thoracicRotation: number
-  wristFlexion: number
-}
-
-interface PerformanceProfile {
-  // Livello esperienza
-  experience: 'beginner' | 'intermediate' | 'advanced' | 'elite'
-  trainingAge: number // anni di allenamento
-  
-  // Massimali attuali (kg)
-  squatMax: number
-  benchMax: number
-  deadliftMax: number
-  
-  // Performance metrics
-  vo2Max?: number
-  restingHeartRate?: number
-  recoveryRate?: number // 0-100
-  
-  // Preferenze allenamento
-  preferredIntensity: 'low' | 'moderate' | 'high'
-  preferredVolume: 'low' | 'moderate' | 'high'
-  preferredFrequency: number // giorni/settimana
-}
-
-interface BiomechanicalProfile {
-  // Range di movimento personalizzati
-  squatDepthRange: { min: number; max: number; optimal: number }
-  benchDepthRange: { min: number; max: number; optimal: number }
-  deadliftRomRange: { min: number; max: number; optimal: number }
-  
-  // Compensazioni note
-  kneeValgusThreshold: number // gradi oltre cui è pericoloso
-  spinalFlexionThreshold: number
-  shoulderImpingementThreshold: number
-  
-  // Pattern di movimento
-  dominantSide: 'left' | 'right' | 'balanced'
-  movementCompensations: string[]
-  injuryHistory: InjuryRecord[]
-  
-  // Velocità ottimali
-  optimalDescentSpeed: number // m/s
-  optimalAscentSpeed: number // m/s
-  
-  // Soglie personalizzate
-  fatigueThreshold: number // 0-100
-  formBreakdownThreshold: number // 0-100
-}
-
-interface InjuryRecord {
-  date: string
-  bodyPart: string
-  severity: 'minor' | 'moderate' | 'severe'
-  recovered: boolean
-  notes: string
-}
-
-interface CalibrationData {
-  exercise: 'squat' | 'bench-press' | 'deadlift'
-  timestamp: string
-  
-  // Misure registrate
-  maxDepth: number
-  minDepth: number
-  avgDepth: number
-  
-  maxVelocity: number
-  minVelocity: number
-  
-  leftRightBalance: number
-  anteriorPosteriorBalance: number
-  
-  comfortableWeight: number
-  perceivedDifficulty: number // 1-10
-  
-  notes: string
-}
-
-interface UserGoals {
-  primaryGoal: 'strength' | 'hypertrophy' | 'endurance' | 'power' | 'health'
-  secondaryGoals: string[]
-  
-  targetWeight?: number // kg obiettivo peso corporeo
-  targetBodyFat?: number // % obiettivo
-  
-  strengthTargets: {
-    squat: number
-    bench: number
-    deadlift: number
-  }
-  
-  timeframe: number // settimane
-  weeklyCommitment: number // ore/settimana
-}
 
 interface Props {
   userId?: string
@@ -151,103 +37,69 @@ export default function UserProfileSystem({
   onProfileUpdate,
   onCalibrationComplete
 }: Props) {
-  // Stati principali
+  // Hook DataManager
+  const { 
+    profile, 
+    updateProfile, 
+    createProfile, 
+    hasProfile,
+    needsOnboarding 
+  } = useUserProfile()
+  
+  const { 
+    calibration, 
+    isCalibrated, 
+    saveCalibration,
+    daysSinceCalibration 
+  } = useCalibration()
+  
+  const {
+    exportData,
+    importData,
+    clearAllData
+  } = useDataManager()
+  
+  // Stati locali UI
   const [activeTab, setActiveTab] = useState<'profile' | 'calibration' | 'goals' | 'history'>('profile')
   const [isCalibrating, setIsCalibrating] = useState(false)
   const [calibrationStep, setCalibrationStep] = useState(0)
   const [editMode, setEditMode] = useState(false)
   
-  // Profili utente
-  const [physicalProfile, setPhysicalProfile] = useState<PhysicalProfile>({
-    age: 30,
-    gender: 'male',
-    height: 175,
-    weight: 75,
-    ankleFlexion: 35,
-    hipFlexion: 120,
-    shoulderFlexion: 180,
-    thoracicRotation: 45,
-    wristFlexion: 90
-  })
-  
-  const [performanceProfile, setPerformanceProfile] = useState<PerformanceProfile>({
-    experience: 'intermediate',
-    trainingAge: 2,
-    squatMax: 100,
-    benchMax: 80,
-    deadliftMax: 120,
-    preferredIntensity: 'moderate',
-    preferredVolume: 'moderate',
-    preferredFrequency: 3
-  })
-  
-  const [biomechanicalProfile, setBiomechanicalProfile] = useState<BiomechanicalProfile>({
-    squatDepthRange: { min: 60, max: 120, optimal: 90 },
-    benchDepthRange: { min: 70, max: 100, optimal: 85 },
-    deadliftRomRange: { min: 0, max: 180, optimal: 170 },
-    kneeValgusThreshold: 15,
-    spinalFlexionThreshold: 30,
-    shoulderImpingementThreshold: 20,
-    dominantSide: 'right',
-    movementCompensations: [],
-    injuryHistory: [],
-    optimalDescentSpeed: 0.5,
-    optimalAscentSpeed: 0.7,
-    fatigueThreshold: 70,
-    formBreakdownThreshold: 30
-  })
-  
-  const [userGoals, setUserGoals] = useState<UserGoals>({
-    primaryGoal: 'strength',
-    secondaryGoals: ['health', 'mobility'],
-    strengthTargets: {
-      squat: 140,
-      bench: 100,
-      deadlift: 160
-    },
-    timeframe: 12,
-    weeklyCommitment: 4
-  })
-  
-  const [calibrationHistory, setCalibrationHistory] = useState<CalibrationData[]>([])
-  
   // Canvas per visualizzazione corpo
   const bodyCanvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // Carica profilo da localStorage
-  useEffect(() => {
-    const savedProfile = localStorage.getItem(`flexcoach_profile_${userId}`)
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile)
-      if (profile.physical) setPhysicalProfile(profile.physical)
-      if (profile.performance) setPerformanceProfile(profile.performance)
-      if (profile.biomechanical) setBiomechanicalProfile(profile.biomechanical)
-      if (profile.goals) setUserGoals(profile.goals)
-      if (profile.calibrationHistory) setCalibrationHistory(profile.calibrationHistory)
-    }
-  }, [userId])
+  // Stati temporanei per editing
+  const [tempProfile, setTempProfile] = useState({
+    name: profile?.name || '',
+    age: profile?.age || 30,
+    gender: profile?.gender || 'male',
+    height: profile?.height || 175,
+    weight: profile?.weight || 75,
+    experienceLevel: profile?.experienceLevel || 'intermediate',
+    trainingGoal: profile?.trainingGoal || 'strength'
+  })
   
-  // Salva profilo
+  // Aggiorna temp profile quando cambia il profilo reale
   useEffect(() => {
-    const profile = {
-      physical: physicalProfile,
-      performance: performanceProfile,
-      biomechanical: biomechanicalProfile,
-      goals: userGoals,
-      calibrationHistory,
-      lastUpdated: new Date().toISOString()
+    if (profile) {
+      setTempProfile({
+        name: profile.name || '',
+        age: profile.age || 30,
+        gender: profile.gender || 'male',
+        height: profile.height || 175,
+        weight: profile.weight || 75,
+        experienceLevel: profile.experienceLevel || 'intermediate',
+        trainingGoal: profile.trainingGoal || 'strength'
+      })
     }
-    
-    localStorage.setItem(`flexcoach_profile_${userId}`, JSON.stringify(profile))
-    
-    if (onProfileUpdate) {
-      onProfileUpdate(profile)
-    }
-  }, [physicalProfile, performanceProfile, biomechanicalProfile, userGoals, calibrationHistory])
+  }, [profile])
   
   // Calcola BMI
   const calculateBMI = (): { value: number; category: string; color: string } => {
-    const bmi = physicalProfile.weight / Math.pow(physicalProfile.height / 100, 2)
+    const height = profile?.height || tempProfile.height
+    const weight = profile?.weight || tempProfile.weight
+    const bmi = weight / Math.pow(height / 100, 2)
     
     let category, color
     if (bmi < 18.5) {
@@ -267,37 +119,15 @@ export default function UserProfileSystem({
     return { value: bmi, category, color }
   }
   
-  // Calcola Wilks Score (forza relativa)
-  const calculateWilksScore = (): number => {
-    const total = performanceProfile.squatMax + performanceProfile.benchMax + performanceProfile.deadliftMax
-    const bodyweight = physicalProfile.weight
-    
-    // Coefficienti Wilks semplificati
-    const a = physicalProfile.gender === 'male' ? -216.0475144 : 594.31747775582
-    const b = physicalProfile.gender === 'male' ? 16.2606339 : -27.23842536447
-    const c = physicalProfile.gender === 'male' ? -0.002388645 : 0.82112226871
-    const d = physicalProfile.gender === 'male' ? -0.00113732 : -0.00930733913
-    const e = physicalProfile.gender === 'male' ? 7.01863E-06 : 0.00004731582
-    const f = physicalProfile.gender === 'male' ? -1.291E-08 : -0.00000009054
-    
-    const denominator = a + b * bodyweight + c * Math.pow(bodyweight, 2) + 
-                       d * Math.pow(bodyweight, 3) + e * Math.pow(bodyweight, 4) + 
-                       f * Math.pow(bodyweight, 5)
-    
-    const coefficient = 500 / denominator
-    return total * coefficient
-  }
-  
   // Calcola età allenamento ottimale
   const calculateTrainingAge = (): string => {
-    const biologicalAge = physicalProfile.age
-    const trainingYears = performanceProfile.trainingAge
+    const age = profile?.age || tempProfile.age
     
-    if (biologicalAge < 25) {
+    if (age < 25) {
       return 'Fase di sviluppo - Focus su tecnica e volume'
-    } else if (biologicalAge < 35) {
+    } else if (age < 35) {
       return 'Picco prestativo - Massima intensità possibile'
-    } else if (biologicalAge < 45) {
+    } else if (age < 45) {
       return 'Maturità - Bilanciare intensità e recupero'
     } else {
       return 'Master - Priorità a mobilità e salute articolare'
@@ -305,11 +135,6 @@ export default function UserProfileSystem({
   }
   
   // Processo di calibrazione
-  const startCalibration = () => {
-    setIsCalibrating(true)
-    setCalibrationStep(0)
-  }
-  
   const calibrationSteps = [
     {
       title: 'Test Mobilità Caviglia',
@@ -348,62 +173,97 @@ export default function UserProfileSystem({
     }
   ]
   
+  const startCalibration = () => {
+    setIsCalibrating(true)
+    setCalibrationStep(0)
+  }
+  
   const handleCalibrationMeasure = (value: number) => {
     const currentStep = calibrationSteps[calibrationStep]
     
-    // Aggiorna profilo basato su calibrazione
+    // Prepara dati calibrazione
+    const calibrationData: any = {
+      isComplete: false,
+      mobilityRanges: {
+        ankle: calibration?.mobilityRanges?.ankle || 35,
+        hip: calibration?.mobilityRanges?.hip || 120,
+        shoulder: calibration?.mobilityRanges?.shoulder || 180,
+        thoracic: calibration?.mobilityRanges?.thoracic || 45
+      },
+      thresholds: {
+        squatDepth: 90,
+        benchDepth: 85,
+        deadliftLockout: 170,
+        valgusThreshold: 15,
+        spinalFlexion: 30
+      },
+      compensations: [],
+      calibratedAt: new Date().toISOString()
+    }
+    
+    // Aggiorna valore specifico
     if (currentStep.measure === 'ankleFlexion') {
-      setPhysicalProfile(prev => ({ ...prev, ankleFlexion: value }))
+      calibrationData.mobilityRanges.ankle = value
     } else if (currentStep.measure === 'hipFlexion') {
-      setPhysicalProfile(prev => ({ ...prev, hipFlexion: value }))
-      // Aggiusta anche range squat basato su mobilità anca
-      setBiomechanicalProfile(prev => ({
-        ...prev,
-        squatDepthRange: {
-          ...prev.squatDepthRange,
-          optimal: Math.min(90, value - 30)
-        }
-      }))
+      calibrationData.mobilityRanges.hip = value
+      calibrationData.thresholds.squatDepth = Math.min(90, value - 30)
     } else if (currentStep.measure === 'shoulderFlexion') {
-      setPhysicalProfile(prev => ({ ...prev, shoulderFlexion: value }))
+      calibrationData.mobilityRanges.shoulder = value
     } else if (currentStep.measure === 'thoracicRotation') {
-      setPhysicalProfile(prev => ({ ...prev, thoracicRotation: value }))
-    } else if (currentStep.measure === 'descentSpeed') {
-      setBiomechanicalProfile(prev => ({ ...prev, optimalDescentSpeed: value }))
+      calibrationData.mobilityRanges.thoracic = value
     }
     
     // Prossimo step o fine
     if (calibrationStep < calibrationSteps.length - 1) {
       setCalibrationStep(prev => prev + 1)
     } else {
-      completeCalibration()
+      // Completa calibrazione
+      calibrationData.isComplete = true
+      saveCalibration(calibrationData)
+      setIsCalibrating(false)
+      setCalibrationStep(0)
+      
+      if (onCalibrationComplete) {
+        onCalibrationComplete()
+      }
     }
   }
   
-  const completeCalibration = () => {
-    setIsCalibrating(false)
-    setCalibrationStep(0)
-    
-    // Salva calibrazione
-    const calibData: CalibrationData = {
-      exercise: 'squat',
-      timestamp: new Date().toISOString(),
-      maxDepth: physicalProfile.hipFlexion,
-      minDepth: 45,
-      avgDepth: 90,
-      maxVelocity: 1.0,
-      minVelocity: 0.3,
-      leftRightBalance: 50,
-      anteriorPosteriorBalance: 50,
-      comfortableWeight: performanceProfile.squatMax * 0.7,
-      perceivedDifficulty: 5,
-      notes: 'Calibrazione iniziale completata'
+  // Salva modifiche profilo
+  const handleSaveProfile = () => {
+    if (hasProfile) {
+      updateProfile(tempProfile)
+    } else {
+      createProfile(tempProfile as any)
     }
+    setEditMode(false)
     
-    setCalibrationHistory([...calibrationHistory, calibData])
-    
-    if (onCalibrationComplete) {
-      onCalibrationComplete()
+    if (onProfileUpdate) {
+      onProfileUpdate(tempProfile)
+    }
+  }
+  
+  // Import/Export handlers
+  const handleExport = () => {
+    exportData()
+  }
+  
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      const result = await importData(file)
+      if (result.success) {
+        alert('Dati importati con successo!')
+        // I dati si aggiorneranno automaticamente tramite gli hook
+      } else {
+        alert('Errore durante l\'importazione: ' + result.error)
+      }
+    }
+  }
+  
+  const handleReset = () => {
+    if (confirm('Sei sicuro di voler cancellare tutti i dati? Questa azione non può essere annullata.')) {
+      clearAllData()
     }
   }
   
@@ -411,32 +271,31 @@ export default function UserProfileSystem({
   const generateRecommendations = (): string[] => {
     const recs: string[] = []
     
-    // Basate su età e esperienza
-    if (physicalProfile.age > 40) {
+    // Basate su età
+    const age = profile?.age || tempProfile.age
+    if (age > 40) {
       recs.push('🔄 Aumenta il riscaldamento a 15 minuti')
       recs.push('🧘 Aggiungi 10 minuti di stretching post-workout')
     }
     
-    // Basate su mobilità
-    if (physicalProfile.ankleFlexion < 30) {
-      recs.push('🦶 Lavora sulla mobilità delle caviglie quotidianamente')
-    }
-    if (physicalProfile.hipFlexion < 110) {
-      recs.push('🦵 Esercizi di mobilità anca prima di ogni squat')
+    // Basate su calibrazione
+    if (calibration) {
+      if (calibration.mobilityRanges.ankle < 30) {
+        recs.push('🦶 Lavora sulla mobilità delle caviglie quotidianamente')
+      }
+      if (calibration.mobilityRanges.hip < 110) {
+        recs.push('🦵 Esercizi di mobilità anca prima di ogni squat')
+      }
     }
     
     // Basate su obiettivi
-    if (userGoals.primaryGoal === 'strength') {
+    const goal = profile?.trainingGoal || tempProfile.trainingGoal
+    if (goal === 'strength') {
       recs.push('💪 Focus su 3-5 reps con 85-95% del massimale')
       recs.push('⏱️ Riposi di 3-5 minuti tra le serie')
-    } else if (userGoals.primaryGoal === 'hypertrophy') {
+    } else if (goal === 'hypertrophy') {
       recs.push('📈 Mantieni 8-12 reps con 70-80% del massimale')
       recs.push('⏱️ Riposi di 60-90 secondi tra le serie')
-    }
-    
-    // Basate su infortuni
-    if (biomechanicalProfile.injuryHistory.length > 0) {
-      recs.push('⚠️ Extra attenzione al riscaldamento delle zone a rischio')
     }
     
     return recs
@@ -447,7 +306,7 @@ export default function UserProfileSystem({
     if (bodyCanvasRef.current) {
       drawBodyProfile()
     }
-  }, [physicalProfile, biomechanicalProfile])
+  }, [profile, calibration, tempProfile])
   
   const drawBodyProfile = () => {
     const canvas = bodyCanvasRef.current
@@ -470,7 +329,8 @@ export default function UserProfileSystem({
     const scale = rect.height / 200
     
     // Proporziona basato su altezza reale
-    const heightRatio = physicalProfile.height / 175 // 175cm reference
+    const height = profile?.height || tempProfile.height
+    const heightRatio = height / 175 // 175cm reference
     
     // Head
     ctx.beginPath()
@@ -515,34 +375,36 @@ export default function UserProfileSystem({
     ctx.lineTo(centerX + 15 * scale, 45 * scale + torsoHeight + legLength)
     ctx.stroke()
     
-    // Highlight mobility limitations
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.3)'
-    
-    if (physicalProfile.ankleFlexion < 30) {
-      // Ankle limitation
-      ctx.beginPath()
-      ctx.arc(centerX - 15 * scale, 45 * scale + torsoHeight + legLength - 5, 8 * scale, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.beginPath()
-      ctx.arc(centerX + 15 * scale, 45 * scale + torsoHeight + legLength - 5, 8 * scale, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    
-    if (physicalProfile.hipFlexion < 110) {
-      // Hip limitation
-      ctx.beginPath()
-      ctx.arc(centerX, 45 * scale + torsoHeight, 10 * scale, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    
-    if (physicalProfile.shoulderFlexion < 170) {
-      // Shoulder limitation
-      ctx.beginPath()
-      ctx.arc(centerX - 25 * scale, 50 * scale, 8 * scale, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.beginPath()
-      ctx.arc(centerX + 25 * scale, 50 * scale, 8 * scale, 0, Math.PI * 2)
-      ctx.fill()
+    // Highlight mobility limitations (se calibrato)
+    if (calibration) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.3)'
+      
+      if (calibration.mobilityRanges.ankle < 30) {
+        // Ankle limitation
+        ctx.beginPath()
+        ctx.arc(centerX - 15 * scale, 45 * scale + torsoHeight + legLength - 5, 8 * scale, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(centerX + 15 * scale, 45 * scale + torsoHeight + legLength - 5, 8 * scale, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      
+      if (calibration.mobilityRanges.hip < 110) {
+        // Hip limitation
+        ctx.beginPath()
+        ctx.arc(centerX, 45 * scale + torsoHeight, 10 * scale, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      
+      if (calibration.mobilityRanges.shoulder < 170) {
+        // Shoulder limitation
+        ctx.beginPath()
+        ctx.arc(centerX - 25 * scale, 50 * scale, 8 * scale, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(centerX + 25 * scale, 50 * scale, 8 * scale, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
     
     // Add measurements
@@ -551,10 +413,11 @@ export default function UserProfileSystem({
     ctx.textAlign = 'center'
     
     // Height
-    ctx.fillText(`${physicalProfile.height}cm`, centerX + 60 * scale, rect.height / 2)
+    ctx.fillText(`${height}cm`, centerX + 60 * scale, rect.height / 2)
     
     // Weight
-    ctx.fillText(`${physicalProfile.weight}kg`, centerX, rect.height - 10)
+    const weight = profile?.weight || tempProfile.weight
+    ctx.fillText(`${weight}kg`, centerX, rect.height - 10)
   }
   
   const getExperienceColor = (exp: string): string => {
@@ -568,7 +431,6 @@ export default function UserProfileSystem({
   }
   
   const bmi = calculateBMI()
-  const wilks = calculateWilksScore()
   const recommendations = generateRecommendations()
   
   return (
@@ -581,12 +443,18 @@ export default function UserProfileSystem({
             Profilo Utente Completo
           </h2>
           <p className="text-sm text-gray-600 mt-1">
-            Calibrazione personalizzata e soglie adattive
+            {hasProfile ? 'Profilo salvato automaticamente' : 'Crea il tuo profilo'}
           </p>
         </div>
         
         <button
-          onClick={() => setEditMode(!editMode)}
+          onClick={() => {
+            if (editMode) {
+              handleSaveProfile()
+            } else {
+              setEditMode(true)
+            }
+          }}
           className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
             editMode 
               ? 'bg-green-600 text-white hover:bg-green-700' 
@@ -603,7 +471,7 @@ export default function UserProfileSystem({
           { id: 'profile', label: '👤 Profilo', icon: UserCircleIcon },
           { id: 'calibration', label: '🎯 Calibrazione', icon: AdjustmentsHorizontalIcon },
           { id: 'goals', label: '🎯 Obiettivi', icon: TrophyIcon },
-          { id: 'history', label: '📊 Storia', icon: ChartBarIcon }
+          { id: 'history', label: '📊 Gestione', icon: ChartBarIcon }
         ].map(tab => (
           <button
             key={tab.id}
@@ -636,18 +504,20 @@ export default function UserProfileSystem({
               <div className="flex items-center justify-between mb-2">
                 <TrophyIcon className="w-5 h-5 text-purple-600" />
               </div>
-              <div className="text-2xl font-bold text-gray-900">{wilks.toFixed(0)}</div>
-              <div className="text-xs text-purple-600">Wilks Score</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {profile?.experienceLevel || tempProfile.experienceLevel}
+              </div>
+              <div className="text-xs text-purple-600">Livello</div>
             </div>
             
             <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <FireIcon className="w-5 h-5 text-green-600" />
+                <CheckCircleIcon className="w-5 h-5 text-green-600" />
               </div>
               <div className="text-2xl font-bold text-gray-900">
-                {performanceProfile.trainingAge}
+                {isCalibrated ? '✅' : '❌'}
               </div>
-              <div className="text-xs text-green-600">Anni Training</div>
+              <div className="text-xs text-green-600">Calibrato</div>
             </div>
             
             <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4">
@@ -655,7 +525,7 @@ export default function UserProfileSystem({
                 <HeartIcon className="w-5 h-5 text-orange-600" />
               </div>
               <div className="text-2xl font-bold text-gray-900">
-                {physicalProfile.age}
+                {profile?.age || tempProfile.age}
               </div>
               <div className="text-xs text-orange-600">Età</div>
             </div>
@@ -674,19 +544,28 @@ export default function UserProfileSystem({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
+                      <label className="text-xs text-gray-600">Nome</label>
+                      <input
+                        type="text"
+                        value={tempProfile.name}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, name: e.target.value }))}
+                        className="w-full px-2 py-1 border rounded"
+                      />
+                    </div>
+                    <div>
                       <label className="text-xs text-gray-600">Età</label>
                       <input
                         type="number"
-                        value={physicalProfile.age}
-                        onChange={(e) => setPhysicalProfile(prev => ({ ...prev, age: parseInt(e.target.value) }))}
+                        value={tempProfile.age}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, age: parseInt(e.target.value) }))}
                         className="w-full px-2 py-1 border rounded"
                       />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600">Genere</label>
                       <select
-                        value={physicalProfile.gender}
-                        onChange={(e) => setPhysicalProfile(prev => ({ ...prev, gender: e.target.value as any }))}
+                        value={tempProfile.gender}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, gender: e.target.value as any }))}
                         className="w-full px-2 py-1 border rounded"
                       >
                         <option value="male">Maschio</option>
@@ -698,8 +577,8 @@ export default function UserProfileSystem({
                       <label className="text-xs text-gray-600">Altezza (cm)</label>
                       <input
                         type="number"
-                        value={physicalProfile.height}
-                        onChange={(e) => setPhysicalProfile(prev => ({ ...prev, height: parseInt(e.target.value) }))}
+                        value={tempProfile.height}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, height: parseInt(e.target.value) }))}
                         className="w-full px-2 py-1 border rounded"
                       />
                     </div>
@@ -707,30 +586,47 @@ export default function UserProfileSystem({
                       <label className="text-xs text-gray-600">Peso (kg)</label>
                       <input
                         type="number"
-                        value={physicalProfile.weight}
-                        onChange={(e) => setPhysicalProfile(prev => ({ ...prev, weight: parseInt(e.target.value) }))}
+                        value={tempProfile.weight}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, weight: parseInt(e.target.value) }))}
                         className="w-full px-2 py-1 border rounded"
                       />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Esperienza</label>
+                      <select
+                        value={tempProfile.experienceLevel}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, experienceLevel: e.target.value as any }))}
+                        className="w-full px-2 py-1 border rounded"
+                      >
+                        <option value="beginner">Principiante</option>
+                        <option value="intermediate">Intermedio</option>
+                        <option value="advanced">Avanzato</option>
+                        <option value="elite">Elite</option>
+                      </select>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
+                    <span className="text-gray-600">Nome:</span>
+                    <span className="font-medium">{profile?.name || 'Non impostato'}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">Età:</span>
-                    <span className="font-medium">{physicalProfile.age} anni</span>
+                    <span className="font-medium">{profile?.age || tempProfile.age} anni</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Genere:</span>
-                    <span className="font-medium capitalize">{physicalProfile.gender}</span>
+                    <span className="font-medium capitalize">{profile?.gender || tempProfile.gender}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Altezza:</span>
-                    <span className="font-medium">{physicalProfile.height} cm</span>
+                    <span className="font-medium">{profile?.height || tempProfile.height} cm</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Peso:</span>
-                    <span className="font-medium">{physicalProfile.weight} kg</span>
+                    <span className="font-medium">{profile?.weight || tempProfile.weight} kg</span>
                   </div>
                 </div>
               )}
@@ -757,139 +653,107 @@ export default function UserProfileSystem({
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-sm text-gray-600">Livello Esperienza</span>
-                    <span className={`text-xs font-medium px-2 py-1 rounded ${getExperienceColor(performanceProfile.experience)}`}>
-                      {performanceProfile.experience}
+                    <span className={`text-xs font-medium px-2 py-1 rounded ${
+                      getExperienceColor(profile?.experienceLevel || tempProfile.experienceLevel)
+                    }`}>
+                      {profile?.experienceLevel || tempProfile.experienceLevel}
                     </span>
                   </div>
                 </div>
                 
-                {/* Massimali */}
-                <div className="space-y-2">
-                  <div className="text-sm font-medium text-gray-700">Massimali (1RM)</div>
-                  {editMode ? (
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-600">Squat</label>
-                        <input
-                          type="number"
-                          value={performanceProfile.squatMax}
-                          onChange={(e) => setPerformanceProfile(prev => ({ ...prev, squatMax: parseInt(e.target.value) }))}
-                          className="w-full px-2 py-1 border rounded text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Panca</label>
-                        <input
-                          type="number"
-                          value={performanceProfile.benchMax}
-                          onChange={(e) => setPerformanceProfile(prev => ({ ...prev, benchMax: parseInt(e.target.value) }))}
-                          className="w-full px-2 py-1 border rounded text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Stacco</label>
-                        <input
-                          type="number"
-                          value={performanceProfile.deadliftMax}
-                          onChange={(e) => setPerformanceProfile(prev => ({ ...prev, deadliftMax: parseInt(e.target.value) }))}
-                          className="w-full px-2 py-1 border rounded text-sm"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div>
-                        <div className="text-xs text-gray-600">Squat</div>
-                        <div className="text-lg font-bold text-blue-600">{performanceProfile.squatMax}kg</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-600">Panca</div>
-                        <div className="text-lg font-bold text-green-600">{performanceProfile.benchMax}kg</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-600">Stacco</div>
-                        <div className="text-lg font-bold text-purple-600">{performanceProfile.deadliftMax}kg</div>
-                      </div>
-                    </div>
-                  )}
+                {/* Training Goal */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm text-gray-600">Obiettivo</span>
+                    {editMode ? (
+                      <select
+                        value={tempProfile.trainingGoal}
+                        onChange={(e) => setTempProfile(prev => ({ ...prev, trainingGoal: e.target.value as any }))}
+                        className="px-2 py-1 border rounded text-sm"
+                      >
+                        <option value="strength">Forza</option>
+                        <option value="hypertrophy">Massa</option>
+                        <option value="endurance">Resistenza</option>
+                        <option value="power">Potenza</option>
+                        <option value="health">Salute</option>
+                      </select>
+                    ) : (
+                      <span className="text-sm font-medium capitalize">
+                        {profile?.trainingGoal || tempProfile.trainingGoal}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
-                {/* Training preferences */}
+                {/* Calibration status */}
                 <div className="pt-3 border-t border-gray-200">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Preferenze Training</div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Intensità:</span>
-                      <span className="font-medium capitalize">{performanceProfile.preferredIntensity}</span>
+                  <div className="text-sm font-medium text-gray-700 mb-2">Stato Calibrazione</div>
+                  {isCalibrated ? (
+                    <div className="text-xs text-green-600">
+                      ✅ Calibrato {daysSinceCalibration ? `${daysSinceCalibration} giorni fa` : 'recentemente'}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Volume:</span>
-                      <span className="font-medium capitalize">{performanceProfile.preferredVolume}</span>
+                  ) : (
+                    <div className="text-xs text-red-600">
+                      ❌ Non calibrato - Vai alla tab Calibrazione
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Frequenza:</span>
-                      <span className="font-medium">{performanceProfile.preferredFrequency}x/sett</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Anni training:</span>
-                      <span className="font-medium">{performanceProfile.trainingAge}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
           
-          {/* Mobility Assessment */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <AdjustmentsHorizontalIcon className="w-5 h-5 text-blue-500" />
-              Valutazione Mobilità
-            </h3>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Caviglia', value: physicalProfile.ankleFlexion, target: 35, key: 'ankle' },
-                { label: 'Anca', value: physicalProfile.hipFlexion, target: 120, key: 'hip' },
-                { label: 'Spalla', value: physicalProfile.shoulderFlexion, target: 180, key: 'shoulder' },
-                { label: 'Torace', value: physicalProfile.thoracicRotation, target: 45, key: 'thoracic' }
-              ].map(item => (
-                <div key={item.key} className="text-center">
-                  <div className="text-sm text-gray-600 mb-2">{item.label}</div>
-                  <div className="relative">
-                    <div className="w-20 h-20 mx-auto">
-                      <svg className="w-20 h-20 transform -rotate-90">
-                        <circle
-                          cx="40"
-                          cy="40"
-                          r="36"
-                          stroke="#E5E7EB"
-                          strokeWidth="8"
-                          fill="none"
-                        />
-                        <circle
-                          cx="40"
-                          cy="40"
-                          r="36"
-                          stroke={item.value >= item.target ? '#10B981' : item.value >= item.target * 0.8 ? '#F59E0B' : '#EF4444'}
-                          strokeWidth="8"
-                          fill="none"
-                          strokeDasharray={`${(item.value / item.target) * 226} 226`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-lg font-bold">{item.value}°</span>
+          {/* Mobility Assessment (se calibrato) */}
+          {calibration && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <AdjustmentsHorizontalIcon className="w-5 h-5 text-blue-500" />
+                Valutazione Mobilità
+              </h3>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Caviglia', value: calibration.mobilityRanges.ankle, target: 35, key: 'ankle' },
+                  { label: 'Anca', value: calibration.mobilityRanges.hip, target: 120, key: 'hip' },
+                  { label: 'Spalla', value: calibration.mobilityRanges.shoulder, target: 180, key: 'shoulder' },
+                  { label: 'Torace', value: calibration.mobilityRanges.thoracic, target: 45, key: 'thoracic' }
+                ].map(item => (
+                  <div key={item.key} className="text-center">
+                    <div className="text-sm text-gray-600 mb-2">{item.label}</div>
+                    <div className="relative">
+                      <div className="w-20 h-20 mx-auto">
+                        <svg className="w-20 h-20 transform -rotate-90">
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="36"
+                            stroke="#E5E7EB"
+                            strokeWidth="8"
+                            fill="none"
+                          />
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="36"
+                            stroke={item.value >= item.target ? '#10B981' : item.value >= item.target * 0.8 ? '#F59E0B' : '#EF4444'}
+                            strokeWidth="8"
+                            fill="none"
+                            strokeDasharray={`${(item.value / item.target) * 226} 226`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-lg font-bold">{item.value}°</span>
+                        </div>
                       </div>
                     </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Target: {item.target}°
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Target: {item.target}°
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           
           {/* Training Age Assessment */}
           <div className="bg-blue-50 rounded-lg p-4">
@@ -934,36 +798,30 @@ export default function UserProfileSystem({
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                 >
                   <ArrowPathIcon className="w-5 h-5 inline mr-2" />
-                  Inizia Calibrazione
+                  {isCalibrated ? 'Ricalibrare' : 'Inizia Calibrazione'}
                 </button>
               </div>
               
               {/* Last Calibration */}
-              {calibrationHistory.length > 0 && (
+              {isCalibrated && calibration && (
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-semibold text-gray-900 mb-3">
-                    📊 Ultima Calibrazione
+                    📊 Calibrazione Attuale
                   </h3>
                   <div className="text-sm text-gray-600">
-                    {new Date(calibrationHistory[calibrationHistory.length - 1].timestamp).toLocaleDateString()}
+                    Calibrato {daysSinceCalibration} giorni fa
                   </div>
-                  <div className="grid grid-cols-3 gap-3 mt-3">
+                  <div className="grid grid-cols-2 gap-3 mt-3">
                     <div className="text-center">
-                      <div className="text-xs text-gray-600">Profondità Max</div>
+                      <div className="text-xs text-gray-600">Mobilità Anca</div>
                       <div className="text-lg font-bold text-blue-600">
-                        {calibrationHistory[calibrationHistory.length - 1].maxDepth}°
+                        {calibration.mobilityRanges.hip}°
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xs text-gray-600">Peso Comfort</div>
+                      <div className="text-xs text-gray-600">Profondità Squat</div>
                       <div className="text-lg font-bold text-green-600">
-                        {calibrationHistory[calibrationHistory.length - 1].comfortableWeight}kg
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs text-gray-600">Difficoltà</div>
-                      <div className="text-lg font-bold text-orange-600">
-                        {calibrationHistory[calibrationHistory.length - 1].perceivedDifficulty}/10
+                        {calibration.thresholds.squatDepth}°
                       </div>
                     </div>
                   </div>
@@ -971,51 +829,40 @@ export default function UserProfileSystem({
               )}
               
               {/* Biomechanical Thresholds */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 mb-4">
-                  ⚙️ Soglie Biomeccaniche Personalizzate
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700">Valgismo Ginocchia Max</span>
-                      <span className="font-medium">{biomechanicalProfile.kneeValgusThreshold}°</span>
+              {calibration && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-4">
+                    ⚙️ Soglie Biomeccaniche Personalizzate
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-700">Valgismo Ginocchia Max</span>
+                        <span className="font-medium">{calibration.thresholds.valgusThreshold}°</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-gradient-to-r from-green-400 to-red-500 h-2 rounded-full"
+                          style={{ width: `${(calibration.thresholds.valgusThreshold / 30) * 100}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-green-400 to-red-500 h-2 rounded-full"
-                        style={{ width: `${(biomechanicalProfile.kneeValgusThreshold / 30) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700">Flessione Spinale Max</span>
-                      <span className="font-medium">{biomechanicalProfile.spinalFlexionThreshold}°</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-green-400 to-red-500 h-2 rounded-full"
-                        style={{ width: `${(biomechanicalProfile.spinalFlexionThreshold / 45) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700">Soglia Fatica</span>
-                      <span className="font-medium">{biomechanicalProfile.fatigueThreshold}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-green-400 to-orange-500 h-2 rounded-full"
-                        style={{ width: `${biomechanicalProfile.fatigueThreshold}%` }}
-                      />
+                    
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-700">Flessione Spinale Max</span>
+                        <span className="font-medium">{calibration.thresholds.spinalFlexion}°</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-gradient-to-r from-green-400 to-red-500 h-2 rounded-full"
+                          style={{ width: `${(calibration.thresholds.spinalFlexion / 45) * 100}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </>
           ) : (
             /* Calibration Process */
@@ -1087,10 +934,14 @@ export default function UserProfileSystem({
               <div>
                 <label className="text-sm font-medium text-gray-700">Obiettivo Primario</label>
                 <select
-                  value={userGoals.primaryGoal}
-                  onChange={(e) => setUserGoals(prev => ({ ...prev, primaryGoal: e.target.value as any }))}
+                  value={tempProfile.trainingGoal}
+                  onChange={(e) => {
+                    setTempProfile(prev => ({ ...prev, trainingGoal: e.target.value as any }))
+                    if (!editMode) {
+                      updateProfile({ trainingGoal: e.target.value })
+                    }
+                  }}
                   className="w-full mt-1 px-3 py-2 border rounded-lg"
-                  disabled={!editMode}
                 >
                   <option value="strength">🏋️ Forza Massima</option>
                   <option value="hypertrophy">💪 Massa Muscolare</option>
@@ -1101,216 +952,121 @@ export default function UserProfileSystem({
               </div>
               
               <div>
-                <label className="text-sm font-medium text-gray-700">Timeframe (settimane)</label>
+                <label className="text-sm font-medium text-gray-700">Frequenza (giorni/sett)</label>
                 <input
                   type="number"
-                  value={userGoals.timeframe}
-                  onChange={(e) => setUserGoals(prev => ({ ...prev, timeframe: parseInt(e.target.value) }))}
+                  min="1"
+                  max="7"
+                  value={3}
                   className="w-full mt-1 px-3 py-2 border rounded-lg"
-                  disabled={!editMode}
                 />
               </div>
             </div>
             
-            <div className="mt-4">
-              <label className="text-sm font-medium text-gray-700">Target Forza (kg)</label>
-              <div className="grid grid-cols-3 gap-3 mt-2">
-                <div>
-                  <label className="text-xs text-gray-600">Squat</label>
-                  <input
-                    type="number"
-                    value={userGoals.strengthTargets.squat}
-                    onChange={(e) => setUserGoals(prev => ({
-                      ...prev,
-                      strengthTargets: { ...prev.strengthTargets, squat: parseInt(e.target.value) }
-                    }))}
-                    className="w-full px-2 py-1 border rounded"
-                    disabled={!editMode}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-600">Panca</label>
-                  <input
-                    type="number"
-                    value={userGoals.strengthTargets.bench}
-                    onChange={(e) => setUserGoals(prev => ({
-                      ...prev,
-                      strengthTargets: { ...prev.strengthTargets, bench: parseInt(e.target.value) }
-                    }))}
-                    className="w-full px-2 py-1 border rounded"
-                    disabled={!editMode}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-600">Stacco</label>
-                  <input
-                    type="number"
-                    value={userGoals.strengthTargets.deadlift}
-                    onChange={(e) => setUserGoals(prev => ({
-                      ...prev,
-                      strengthTargets: { ...prev.strengthTargets, deadlift: parseInt(e.target.value) }
-                    }))}
-                    className="w-full px-2 py-1 border rounded"
-                    disabled={!editMode}
-                  />
-                </div>
+            <div className="mt-6 p-4 bg-white rounded-lg">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                📊 Raccomandazioni per il tuo obiettivo
+              </h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                {tempProfile.trainingGoal === 'strength' && (
+                  <>
+                    <div>• 3-5 ripetizioni per serie</div>
+                    <div>• 85-95% del massimale</div>
+                    <div>• 3-5 minuti di riposo</div>
+                    <div>• Focus su movimenti composti</div>
+                  </>
+                )}
+                {tempProfile.trainingGoal === 'hypertrophy' && (
+                  <>
+                    <div>• 8-12 ripetizioni per serie</div>
+                    <div>• 70-85% del massimale</div>
+                    <div>• 60-90 secondi di riposo</div>
+                    <div>• Volume totale elevato</div>
+                  </>
+                )}
+                {tempProfile.trainingGoal === 'endurance' && (
+                  <>
+                    <div>• 15+ ripetizioni per serie</div>
+                    <div>• 50-70% del massimale</div>
+                    <div>• 30-60 secondi di riposo</div>
+                    <div>• Circuit training consigliato</div>
+                  </>
+                )}
               </div>
-            </div>
-            
-            {/* Progress Tracking */}
-            <div className="mt-6 space-y-3">
-              <h4 className="text-sm font-medium text-gray-700">Progressi verso Obiettivi</h4>
-              {['squat', 'bench', 'deadlift'].map(exercise => {
-                const current = performanceProfile[`${exercise}Max` as keyof PerformanceProfile] as number
-                const target = userGoals.strengthTargets[exercise as keyof typeof userGoals.strengthTargets]
-                const progress = (current / target) * 100
-                
-                return (
-                  <div key={exercise}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="capitalize">{exercise}</span>
-                      <span className="text-gray-600">
-                        {current} / {target} kg ({progress.toFixed(0)}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all ${
-                          progress >= 100 ? 'bg-green-500' :
-                          progress >= 75 ? 'bg-blue-500' :
-                          progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${Math.min(100, progress)}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
             </div>
           </div>
         </div>
       )}
       
-      {/* History Tab */}
+      {/* Data Management Tab */}
       {activeTab === 'history' && (
         <div className="space-y-6">
           <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-4">
-              📅 Storia Calibrazioni
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <DocumentTextIcon className="w-5 h-5 text-blue-600" />
+              Gestione Dati
             </h3>
-            {calibrationHistory.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {calibrationHistory.map((cal, idx) => (
-                  <div key={idx} className="bg-white p-3 rounded border border-gray-200">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">
-                        {new Date(cal.timestamp).toLocaleDateString()}
-                      </span>
-                      <span className="text-gray-600">
-                        {cal.exercise}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                      <div>
-                        <span className="text-gray-600">Max Depth: </span>
-                        <span className="font-medium">{cal.maxDepth}°</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Peso: </span>
-                        <span className="font-medium">{cal.comfortableWeight}kg</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Difficoltà: </span>
-                        <span className="font-medium">{cal.perceivedDifficulty}/10</span>
-                      </div>
-                    </div>
-                    {cal.notes && (
-                      <div className="text-xs text-gray-500 mt-2 italic">
-                        {cal.notes}
-                      </div>
-                    )}
-                  </div>
-                ))}
+            
+            <div className="space-y-3">
+              {/* Export */}
+              <button
+                onClick={handleExport}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <DocumentArrowDownIcon className="w-5 h-5" />
+                Esporta tutti i dati (JSON)
+              </button>
+              
+              {/* Import */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <DocumentArrowUpIcon className="w-5 h-5" />
+                  Importa dati salvati
+                </button>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <CalendarIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm">Nessuna calibrazione registrata</p>
+              
+              {/* Reset */}
+              <button
+                onClick={handleReset}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+              >
+                <ExclamationTriangleIcon className="w-5 h-5" />
+                Cancella tutti i dati
+              </button>
+              
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  <InformationCircleIcon className="w-4 h-4 inline mr-1" />
+                  I tuoi dati sono salvati localmente sul dispositivo e sincronizzati automaticamente.
+                  Usa l'export per fare un backup o trasferire i dati su un altro dispositivo.
+                </p>
               </div>
-            )}
+            </div>
           </div>
           
-          {/* Injury History */}
-          {biomechanicalProfile.injuryHistory.length > 0 && (
-            <div className="bg-red-50 rounded-lg p-4">
-              <h3 className="font-semibold text-red-900 mb-4">
-                🏥 Storia Infortuni
+          {/* Test Controls */}
+          {needsOnboarding && (
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-900 mb-2">
+                ⚠️ Completa il tuo profilo
               </h3>
-              <div className="space-y-2">
-                {biomechanicalProfile.injuryHistory.map((injury, idx) => (
-                  <div key={idx} className="bg-white p-3 rounded border border-red-200">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium capitalize">{injury.bodyPart}</span>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        injury.recovered ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {injury.recovered ? 'Recuperato' : 'In recupero'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {new Date(injury.date).toLocaleDateString()} - {injury.severity}
-                    </div>
-                    {injury.notes && (
-                      <div className="text-xs text-gray-500 mt-2">
-                        {injury.notes}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-yellow-700">
+                Per utilizzare FlexCoach al meglio, completa il tuo profilo nella tab Profilo.
+              </p>
             </div>
           )}
         </div>
       )}
-      
-      {/* Test Controls */}
-      <div className="mt-6 pt-6 border-t border-gray-200 flex gap-3">
-        <button
-          onClick={() => {
-            const mockCalibration: CalibrationData = {
-              exercise: 'squat',
-              timestamp: new Date().toISOString(),
-              maxDepth: 110 + Math.random() * 20,
-              minDepth: 45,
-              avgDepth: 90,
-              maxVelocity: 1.0,
-              minVelocity: 0.3,
-              leftRightBalance: 48 + Math.random() * 4,
-              anteriorPosteriorBalance: 48 + Math.random() * 4,
-              comfortableWeight: 70 + Math.random() * 30,
-              perceivedDifficulty: 5 + Math.floor(Math.random() * 3),
-              notes: 'Test calibrazione automatica'
-            }
-            setCalibrationHistory([...calibrationHistory, mockCalibration])
-          }}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
-        >
-          <BeakerIcon className="w-4 h-4 inline mr-2" />
-          Test Calibrazione
-        </button>
-        
-        <button
-          onClick={() => {
-            if (confirm('Vuoi resettare tutto il profilo?')) {
-              localStorage.removeItem(`flexcoach_profile_${userId}`)
-              window.location.reload()
-            }
-          }}
-          className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-        >
-          Reset Profilo
-        </button>
-      </div>
     </div>
   )
 }
