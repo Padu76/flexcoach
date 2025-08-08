@@ -9,7 +9,8 @@ const nextConfig = {
   
   // Experimental features per performance
   experimental: {
-    optimizeCss: true,
+    // Disabilitato optimizeCss perché richiede critters
+    // optimizeCss: true,
   },
   
   // Headers di sicurezza
