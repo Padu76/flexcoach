@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { 
   HomeIcon,
@@ -32,7 +32,8 @@ const InjuryPreventionSystem = dynamic(() => import('@/components/InjuryPreventi
 
 type ExerciseType = 'squat' | 'bench-press' | 'deadlift'
 
-export default function DashboardPage() {
+// Componente interno che usa useSearchParams (deve essere wrappato in Suspense)
+function DashboardContent() {
   const searchParams = useSearchParams()
   const section = searchParams.get('section') || 'overview'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -372,5 +373,26 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Loading fallback component
+function DashboardLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Caricamento dashboard...</p>
+      </div>
+    </div>
+  )
+}
+
+// Main component con Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   )
 }
