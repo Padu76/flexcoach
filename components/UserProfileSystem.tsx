@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useUserProfile, useCalibration, useDataManager } from '@/hooks/useDataManager'
+import type { CalibrationData } from '@/types/data'
 import {
   UserCircleIcon,
   CameraIcon,
@@ -18,10 +19,9 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline'
 import Webcam from 'react-webcam'
-import type { CalibrationData, DeepPartial, UserProfile } from '@/types/data'
 
 export default function UserProfileSystem() {
-  // DataManager Hooks - SOLO quelli che esistono davvero
+  // DataManager Hooks - SOLO funzioni che esistono davvero
   const { profile, updateProfile, hasProfile } = useUserProfile()
   const { calibration, saveCalibration, isCalibrated } = useCalibration()
   const { exportData, importData } = useDataManager()
@@ -29,13 +29,18 @@ export default function UserProfileSystem() {
   // Stati locali
   const [activeTab, setActiveTab] = useState<'profile' | 'calibration' | 'data'>('profile')
   const [editMode, setEditMode] = useState(false)
-  const [tempProfile, setTempProfile] = useState<DeepPartial<UserProfile>>({
-    name: profile?.name || '',
-    age: profile?.age || undefined,
-    weight: profile?.weight || undefined,
-    height: profile?.height || undefined,
-    experienceLevel: profile?.experienceLevel || 'beginner',
-    trainingGoal: profile?.trainingGoal || 'general'
+  const [tempProfile, setTempProfile] = useState({
+    name: '',
+    email: '',
+    age: 0,
+    gender: 'other' as 'male' | 'female' | 'other',
+    weight: 0,
+    height: 0,
+    experienceLevel: 'beginner' as 'beginner' | 'intermediate' | 'advanced' | 'elite',
+    trainingGoal: 'general' as 'strength' | 'hypertrophy' | 'endurance' | 'general',
+    preferredUnit: 'kg' as 'kg' | 'lbs',
+    language: 'it',
+    timezone: 'Europe/Rome'
   })
   
   // Stati calibrazione
@@ -45,17 +50,17 @@ export default function UserProfileSystem() {
     calibratedAt: new Date().toISOString(),
     isComplete: false,
     mobilityRanges: {
-      ankle: 45,
+      ankle: 30,
       hip: 90,
       shoulder: 180,
-      thoracic: 30
+      thoracic: 45
     },
     thresholds: {
       squatDepth: 90,
       benchDepth: 5,
       deadliftLockout: 170,
       valgusThreshold: 10,
-      spinalFlexion: 30
+      spinalFlexion: 15
     },
     compensations: [],
     limitations: [],
@@ -70,12 +75,17 @@ export default function UserProfileSystem() {
   useEffect(() => {
     if (profile) {
       setTempProfile({
-        name: profile.name,
-        age: profile.age,
-        weight: profile.weight,
-        height: profile.height,
-        experienceLevel: profile.experienceLevel,
-        trainingGoal: profile.trainingGoal
+        name: profile.name || '',
+        email: profile.email || '',
+        age: profile.age || 0,
+        gender: profile.gender || 'other',
+        weight: profile.weight || 0,
+        height: profile.height || 0,
+        experienceLevel: profile.experienceLevel || 'beginner',
+        trainingGoal: profile.trainingGoal || 'general',
+        preferredUnit: profile.preferredUnit || 'kg',
+        language: profile.language || 'it',
+        timezone: profile.timezone || 'Europe/Rome'
       })
     }
   }, [profile])
@@ -88,15 +98,20 @@ export default function UserProfileSystem() {
   
   // Reset profilo (simula delete)
   const handleDeleteProfile = () => {
-    if (window.confirm('Sei sicuro di voler eliminare il profilo? Questa azione non può essere annullata.')) {
-      // Reset profilo a valori vuoti
-      const emptyProfile: DeepPartial<UserProfile> = {
+    if (window.confirm('Sei sicuro di voler resettare il profilo? Questa azione non può essere annullata.')) {
+      // Reset a valori vuoti
+      const emptyProfile = {
         name: '',
-        age: undefined,
-        weight: undefined,
-        height: undefined,
-        experienceLevel: 'beginner',
-        trainingGoal: 'general'
+        email: '',
+        age: 0,
+        gender: 'other' as const,
+        weight: 0,
+        height: 0,
+        experienceLevel: 'beginner' as const,
+        trainingGoal: 'general' as const,
+        preferredUnit: 'kg' as const,
+        language: '',
+        timezone: ''
       }
       updateProfile(emptyProfile)
       setTempProfile(emptyProfile)
@@ -104,19 +119,15 @@ export default function UserProfileSystem() {
     }
   }
   
-  // Import data - ora accetta File correttamente
+  // Import data - ora accetta File direttamente
   const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      try {
-        const result = await importData(file)
-        if (result.success) {
-          alert('Dati importati con successo!')
-        } else {
-          alert(`Errore nell'importazione: ${result.error}`)
-        }
-      } catch (error) {
-        alert('Errore nell\'importazione dei dati')
+      const result = await importData(file)
+      if (result.success) {
+        alert('Dati importati con successo!')
+      } else {
+        alert('Errore nell\'importazione dei dati: ' + result.error)
       }
     }
   }
@@ -161,13 +172,13 @@ export default function UserProfileSystem() {
     if (calibrationStep < calibrationSteps.length - 1) {
       setCalibrationStep(calibrationStep + 1)
     } else {
-      // Completa e salva calibrazione
-      const completedCalibration: CalibrationData = {
+      // Salva calibrazione
+      const completeCalibration: CalibrationData = {
         ...calibrationData,
-        isComplete: true,
-        calibratedAt: new Date().toISOString()
+        calibratedAt: new Date().toISOString(),
+        isComplete: true
       }
-      saveCalibration(completedCalibration)
+      saveCalibration(completeCalibration)
       setIsCalibrating(false)
       setCalibrationStep(0)
     }
@@ -180,17 +191,17 @@ export default function UserProfileSystem() {
         calibratedAt: new Date().toISOString(),
         isComplete: false,
         mobilityRanges: {
-          ankle: 45,
+          ankle: 30,
           hip: 90,
           shoulder: 180,
-          thoracic: 30
+          thoracic: 45
         },
         thresholds: {
           squatDepth: 90,
           benchDepth: 5,
           deadliftLockout: 170,
           valgusThreshold: 10,
-          spinalFlexion: 30
+          spinalFlexion: 15
         },
         compensations: [],
         limitations: [],
@@ -199,6 +210,53 @@ export default function UserProfileSystem() {
       saveCalibration(resetData)
       setCalibrationData(resetData)
     }
+  }
+  
+  // Aggiungi compensazione
+  const addCompensation = () => {
+    const compensation = prompt('Descrivi la compensazione rilevata:')
+    if (compensation) {
+      setCalibrationData(prev => ({
+        ...prev,
+        compensations: [...prev.compensations, compensation]
+      }))
+    }
+  }
+  
+  // Rimuovi compensazione
+  const removeCompensation = (index: number) => {
+    setCalibrationData(prev => ({
+      ...prev,
+      compensations: prev.compensations.filter((_, i) => i !== index)
+    }))
+  }
+  
+  // Aggiungi limitazione
+  const addLimitation = () => {
+    const limitation = prompt('Descrivi la limitazione fisica:')
+    if (limitation) {
+      setCalibrationData(prev => ({
+        ...prev,
+        limitations: [...(prev.limitations || []), limitation]
+      }))
+    }
+  }
+  
+  // Rimuovi limitazione
+  const removeLimitation = (index: number) => {
+    setCalibrationData(prev => ({
+      ...prev,
+      limitations: prev.limitations?.filter((_, i) => i !== index) || []
+    }))
+  }
+  
+  // Calcola BMI
+  const calculateBMI = () => {
+    if (tempProfile.weight && tempProfile.height) {
+      const heightInM = tempProfile.height / 100
+      return Math.round((tempProfile.weight / (heightInM * heightInM)) * 10) / 10
+    }
+    return 0
   }
   
   return (
@@ -266,14 +324,21 @@ export default function UserProfileSystem() {
                   <button
                     onClick={() => {
                       setEditMode(false)
-                      setTempProfile({
-                        name: profile?.name || '',
-                        age: profile?.age,
-                        weight: profile?.weight,
-                        height: profile?.height,
-                        experienceLevel: profile?.experienceLevel || 'beginner',
-                        trainingGoal: profile?.trainingGoal || 'general'
-                      })
+                      if (profile) {
+                        setTempProfile({
+                          name: profile.name || '',
+                          email: profile.email || '',
+                          age: profile.age || 0,
+                          gender: profile.gender || 'other',
+                          weight: profile.weight || 0,
+                          height: profile.height || 0,
+                          experienceLevel: profile.experienceLevel || 'beginner',
+                          trainingGoal: profile.trainingGoal || 'general',
+                          preferredUnit: profile.preferredUnit || 'kg',
+                          language: profile.language || 'it',
+                          timezone: profile.timezone || 'Europe/Rome'
+                        })
+                      }
                     }}
                     className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
                   >
@@ -298,11 +363,27 @@ export default function UserProfileSystem() {
               <label className="block text-sm font-medium text-gray-700">Nome</label>
               <input
                 type="text"
-                value={tempProfile.name || ''}
+                value={tempProfile.name}
                 onChange={(e) => {
                   setTempProfile(prev => ({ ...prev, name: e.target.value }))
                   if (!editMode && hasProfile) {
                     updateProfile({ name: e.target.value })
+                  }
+                }}
+                disabled={hasProfile && !editMode}
+                className="w-full mt-1 px-3 py-2 border rounded-lg disabled:bg-gray-100"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Email</label>
+              <input
+                type="email"
+                value={tempProfile.email}
+                onChange={(e) => {
+                  setTempProfile(prev => ({ ...prev, email: e.target.value }))
+                  if (!editMode && hasProfile) {
+                    updateProfile({ email: e.target.value })
                   }
                 }}
                 disabled={hasProfile && !editMode}
@@ -316,7 +397,7 @@ export default function UserProfileSystem() {
                 type="number"
                 value={tempProfile.age || ''}
                 onChange={(e) => {
-                  const age = parseInt(e.target.value) || undefined
+                  const age = parseInt(e.target.value) || 0
                   setTempProfile(prev => ({ ...prev, age }))
                   if (!editMode && hasProfile) {
                     updateProfile({ age })
@@ -328,12 +409,32 @@ export default function UserProfileSystem() {
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-700">Genere</label>
+              <select
+                value={tempProfile.gender}
+                onChange={(e) => {
+                  const gender = e.target.value as 'male' | 'female' | 'other'
+                  setTempProfile(prev => ({ ...prev, gender }))
+                  if (!editMode && hasProfile) {
+                    updateProfile({ gender })
+                  }
+                }}
+                disabled={hasProfile && !editMode}
+                className="w-full mt-1 px-3 py-2 border rounded-lg disabled:bg-gray-100"
+              >
+                <option value="male">Maschio</option>
+                <option value="female">Femmina</option>
+                <option value="other">Altro</option>
+              </select>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-700">Peso (kg)</label>
               <input
                 type="number"
                 value={tempProfile.weight || ''}
                 onChange={(e) => {
-                  const weight = parseFloat(e.target.value) || undefined
+                  const weight = parseFloat(e.target.value) || 0
                   setTempProfile(prev => ({ ...prev, weight }))
                   if (!editMode && hasProfile) {
                     updateProfile({ weight })
@@ -350,7 +451,7 @@ export default function UserProfileSystem() {
                 type="number"
                 value={tempProfile.height || ''}
                 onChange={(e) => {
-                  const height = parseInt(e.target.value) || undefined
+                  const height = parseInt(e.target.value) || 0
                   setTempProfile(prev => ({ ...prev, height }))
                   if (!editMode && hasProfile) {
                     updateProfile({ height })
@@ -362,9 +463,16 @@ export default function UserProfileSystem() {
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-700">BMI</label>
+              <div className="mt-1 px-3 py-2 border rounded-lg bg-gray-100">
+                {calculateBMI() || '-'}
+              </div>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-700">Livello Esperienza</label>
               <select
-                value={tempProfile.experienceLevel || 'beginner'}
+                value={tempProfile.experienceLevel}
                 onChange={(e) => {
                   const level = e.target.value as 'beginner' | 'intermediate' | 'advanced' | 'elite'
                   setTempProfile(prev => ({ ...prev, experienceLevel: level }))
@@ -385,12 +493,11 @@ export default function UserProfileSystem() {
             <div>
               <label className="block text-sm font-medium text-gray-700">Obiettivo Principale</label>
               <select
-                value={tempProfile.trainingGoal || 'general'}
+                value={tempProfile.trainingGoal}
                 onChange={(e) => {
-                  const goal = e.target.value as 'strength' | 'hypertrophy' | 'endurance' | 'general'
-                  setTempProfile(prev => ({ ...prev, trainingGoal: goal }))
+                  setTempProfile(prev => ({ ...prev, trainingGoal: e.target.value as any }))
                   if (!editMode && hasProfile) {
-                    updateProfile({ trainingGoal: goal })
+                    updateProfile({ trainingGoal: e.target.value as "strength" | "hypertrophy" | "endurance" | "general" })
                   }
                 }}
                 disabled={hasProfile && !editMode}
@@ -402,19 +509,26 @@ export default function UserProfileSystem() {
                 <option value="general">Generale</option>
               </select>
             </div>
-          </div>
-          
-          {/* BMI Display */}
-          {tempProfile.weight && tempProfile.height && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">BMI</span>
-                <span className="text-lg font-bold text-blue-600">
-                  {(tempProfile.weight / Math.pow(tempProfile.height / 100, 2)).toFixed(1)}
-                </span>
-              </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Unità di Misura</label>
+              <select
+                value={tempProfile.preferredUnit}
+                onChange={(e) => {
+                  const unit = e.target.value as 'kg' | 'lbs'
+                  setTempProfile(prev => ({ ...prev, preferredUnit: unit }))
+                  if (!editMode && hasProfile) {
+                    updateProfile({ preferredUnit: unit })
+                  }
+                }}
+                disabled={hasProfile && !editMode}
+                className="w-full mt-1 px-3 py-2 border rounded-lg disabled:bg-gray-100"
+              >
+                <option value="kg">Chilogrammi (kg)</option>
+                <option value="lbs">Libbre (lbs)</option>
+              </select>
             </div>
-          )}
+          </div>
           
           {/* Save button for new profile */}
           {!hasProfile && (
@@ -508,6 +622,34 @@ export default function UserProfileSystem() {
                   </div>
                 </div>
                 
+                {/* Compensazioni per ultimo step */}
+                {calibrationStep === calibrationSteps.length - 1 && (
+                  <div className="mb-6 text-left max-w-md mx-auto">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Compensazioni Rilevate
+                    </label>
+                    <div className="space-y-2 mb-2">
+                      {calibrationData.compensations.map((comp, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-yellow-50 rounded">
+                          <span className="text-sm">{comp}</span>
+                          <button
+                            onClick={() => removeCompensation(idx)}
+                            className="text-yellow-600 hover:text-yellow-800"
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={addCompensation}
+                      className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm"
+                    >
+                      + Aggiungi Compensazione
+                    </button>
+                  </div>
+                )}
+                
                 <button
                   onClick={nextCalibrationStep}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
@@ -520,45 +662,91 @@ export default function UserProfileSystem() {
             <div>
               {/* Calibration Data Display */}
               {isCalibrated && calibration && (
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-3">Mobilità Articolare</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Caviglia:</span>
-                        <span className="font-medium">{calibration.mobilityRanges?.ankle || 45}°</span>
+                <div className="space-y-6">
+                  {/* Mobility Ranges */}
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Range di Mobilità</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Caviglia</div>
+                        <div className="text-xl font-bold text-blue-900">{calibration.mobilityRanges.ankle}°</div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Anca:</span>
-                        <span className="font-medium">{calibration.mobilityRanges?.hip || 90}°</span>
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Anca</div>
+                        <div className="text-xl font-bold text-blue-900">{calibration.mobilityRanges.hip}°</div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Spalla:</span>
-                        <span className="font-medium">{calibration.mobilityRanges?.shoulder || 180}°</span>
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Spalla</div>
+                        <div className="text-xl font-bold text-blue-900">{calibration.mobilityRanges.shoulder}°</div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Toracica:</span>
-                        <span className="font-medium">{calibration.mobilityRanges?.thoracic || 30}°</span>
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Toracica</div>
+                        <div className="text-xl font-bold text-blue-900">{calibration.mobilityRanges.thoracic}°</div>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-green-900 mb-3">Soglie Personalizzate</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Profondità Squat:</span>
-                        <span className="font-medium">{calibration.thresholds?.squatDepth || 90}°</span>
+                  {/* Thresholds */}
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Soglie Personalizzate</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Squat Depth</div>
+                        <div className="text-xl font-bold text-green-900">{calibration.thresholds.squatDepth}°</div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Profondità Panca:</span>
-                        <span className="font-medium">{calibration.thresholds?.benchDepth || 5}cm</span>
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Bench Depth</div>
+                        <div className="text-xl font-bold text-green-900">{calibration.thresholds.benchDepth}cm</div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Lockout Stacco:</span>
-                        <span className="font-medium">{calibration.thresholds?.deadliftLockout || 170}°</span>
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Deadlift Lockout</div>
+                        <div className="text-xl font-bold text-green-900">{calibration.thresholds.deadliftLockout}°</div>
+                      </div>
+                      <div className="bg-orange-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Valgus Max</div>
+                        <div className="text-xl font-bold text-orange-900">{calibration.thresholds.valgusThreshold}°</div>
+                      </div>
+                      <div className="bg-orange-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600">Spinal Flexion</div>
+                        <div className="text-xl font-bold text-orange-900">{calibration.thresholds.spinalFlexion}°</div>
                       </div>
                     </div>
+                  </div>
+                  
+                  {/* Compensations & Limitations */}
+                  {(calibration.compensations.length > 0 || calibration.limitations?.length) && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {calibration.compensations.length > 0 && (
+                        <div>
+                          <h3 className="font-semibold text-gray-900 mb-3">Compensazioni</h3>
+                          <div className="space-y-2">
+                            {calibration.compensations.map((comp, idx) => (
+                              <div key={idx} className="p-2 bg-yellow-50 rounded text-sm">
+                                {comp}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {calibration.limitations && calibration.limitations.length > 0 && (
+                        <div>
+                          <h3 className="font-semibold text-gray-900 mb-3">Limitazioni</h3>
+                          <div className="space-y-2">
+                            {calibration.limitations.map((lim, idx) => (
+                              <div key={idx} className="p-2 bg-red-50 rounded text-sm">
+                                {lim}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Calibration Date */}
+                  <div className="text-sm text-gray-600">
+                    Ultima calibrazione: {new Date(calibration.calibratedAt).toLocaleDateString('it-IT')}
                   </div>
                 </div>
               )}
@@ -660,6 +848,51 @@ export default function UserProfileSystem() {
                 </div>
               </div>
             </div>
+            
+            {/* Limitations Management (if calibrated) */}
+            {isCalibrated && calibration && (
+              <div className="border rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Gestione Limitazioni
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Aggiungi o rimuovi limitazioni fisiche per personalizzare il feedback
+                </p>
+                <div className="space-y-2">
+                  {calibration.limitations?.map((limitation, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                      <span className="text-sm">{limitation}</span>
+                      <button
+                        onClick={() => {
+                          const newLimitations = calibration.limitations?.filter((_, i) => i !== idx) || []
+                          saveCalibration({
+                            ...calibration,
+                            limitations: newLimitations
+                          })
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const limitation = prompt('Descrivi la limitazione fisica:')
+                      if (limitation) {
+                        saveCalibration({
+                          ...calibration,
+                          limitations: [...(calibration.limitations || []), limitation]
+                        })
+                      }
+                    }}
+                    className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
+                  >
+                    + Aggiungi Limitazione
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
