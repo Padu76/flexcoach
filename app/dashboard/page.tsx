@@ -39,7 +39,7 @@ function DashboardContent() {
   const section = searchParams.get('section') || 'overview'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('squat')
-  const { exportData, importData, profile, preferences, updateAppPreferences } = useDataManager()
+  const { exportData, importData, profile, preferences } = useDataManager()
   
   // Check se mostrare onboarding
   const [showOnboarding, setShowOnboarding] = useState(false)
