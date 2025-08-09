@@ -554,10 +554,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setIsPaused(false)
       setSetStartTime(Date.now())
       
-      // Auto-fullscreen se preferito
-      if (preferences?.autoFullscreen) {
-        enterFullscreen()
-      }
+      // Auto-fullscreen se preferito (per ora disabilitato)
+      // if (preferences?.autoFullscreen) {
+      //   enterFullscreen()
+      // }
       
       // Start tracking reale
       await startPoseTracking()
