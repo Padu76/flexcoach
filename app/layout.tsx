@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import Link from 'next/link'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -78,28 +79,39 @@ export default function RootLayout({
           
           {/* Main application */}
           <div className="min-h-screen flex flex-col">
-            {/* Header semplificato senza navigation */}
+            {/* Header con navigation */}
             <header className="bg-white shadow-sm border-b border-gray-200">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
-                  <div className="flex items-center">
-                    <span className="text-2xl font-bold text-primary-600">
+                  {/* Logo cliccabile che porta alla home */}
+                  <Link href="/" className="flex items-center">
+                    <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                       FlexCoach
                     </span>
-                  </div>
+                  </Link>
                   
-                  {/* Placeholder per menu futuro */}
-                  <nav className="hidden md:flex items-center space-x-4">
-                    <span className="text-sm text-gray-500">
-                      Menu presto disponibile
-                    </span>
+                  {/* Menu con Trainer */}
+                  <nav className="hidden md:flex items-center space-x-6">
+                    <Link href="/dashboard" className="text-gray-700 hover:text-blue-600 transition-colors">
+                      Dashboard
+                    </Link>
+                    <Link href="/exercises" className="text-gray-700 hover:text-blue-600 transition-colors">
+                      Esercizi
+                    </Link>
+                    <div className="w-px h-6 bg-gray-300" />
+                    <Link href="/trainer" className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1 transition-colors">
+                      <span className="text-lg">👨‍🏫</span>
+                      Trainer
+                    </Link>
                   </nav>
                   
-                  {/* Mobile menu placeholder */}
+                  {/* Mobile menu button */}
                   <div className="md:hidden">
-                    <span className="text-sm text-gray-500">
-                      🚧
-                    </span>
+                    <button className="text-gray-500 hover:text-gray-700">
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -119,9 +131,6 @@ export default function RootLayout({
                   </p>
                   <p className="text-sm text-gray-500 mt-2">
                     Allenamento fitness AI con correzione della forma in tempo reale
-                  </p>
-                  <p className="text-xs text-yellow-400 mt-4">
-                    🚧 Sito in costruzione - Funzionalità in arrivo presto!
                   </p>
                 </div>
               </div>
