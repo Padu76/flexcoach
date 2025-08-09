@@ -19,10 +19,10 @@ import {
   ExclamationTriangleIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline'
-import { useDataManager } from '@/hooks/useDataManager'
 import type { ExerciseType } from '@/types'
 
-interface OnboardingData {
+// Export per usarlo anche nel componente padre
+export interface OnboardingData {
   // Step 1: Dati Personali
   name: string
   age: number
@@ -49,12 +49,12 @@ interface OnboardingData {
 }
 
 interface Props {
-  onComplete: () => void
+  onComplete: (data: OnboardingData) => void
   onSkip?: () => void
 }
 
 export default function OnboardingFlow({ onComplete, onSkip }: Props) {
-  const { dataManager } = useDataManager()
+  // Rimosso useDataManager - i dati verranno salvati dal componente padre
   const [currentStep, setCurrentStep] = useState(1)
   const [isAnimating, setIsAnimating] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -179,56 +179,8 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
   const handleComplete = () => {
     if (!validateStep(currentStep)) return
     
-    // Salva profilo utente
-    dataManager.updateUserProfile({
-      name: data.name,
-      age: data.age,
-      weight: data.weight,
-      height: data.height,
-      gender: data.gender,
-      experienceLevel: data.experienceLevel,
-      goals: data.goals,
-      weeklyTrainingDays: data.weeklyTrainingDays
-    })
-    
-    // Salva calibrazione
-    dataManager.saveCalibration('squat', {
-      exerciseType: 'squat',
-      maxWeight: data.squatMax,
-      lastTested: new Date().toISOString(),
-      reps: 1,
-      rpe: 10
-    })
-    
-    dataManager.saveCalibration('bench-press', {
-      exerciseType: 'bench-press',
-      maxWeight: data.benchMax,
-      lastTested: new Date().toISOString(),
-      reps: 1,
-      rpe: 10
-    })
-    
-    dataManager.saveCalibration('deadlift', {
-      exerciseType: 'deadlift',
-      maxWeight: data.deadliftMax,
-      lastTested: new Date().toISOString(),
-      reps: 1,
-      rpe: 10
-    })
-    
-    // Segna onboarding completato
-    dataManager.updateAppPreferences({
-      theme: 'light',
-      language: 'it',
-      notifications: {
-        workoutReminders: true,
-        achievements: true,
-        weeklyReports: true
-      },
-      onboardingCompleted: true
-    })
-    
-    onComplete()
+    // Passa i dati al componente padre che li salverà
+    onComplete(data)
   }
   
   // Progress bar component
