@@ -46,10 +46,11 @@ function DashboardContent() {
   
   useEffect(() => {
     // Controlla se l'onboarding è stato completato
-    if (!preferences?.onboardingCompleted) {
+    // Se non c'è un profilo completo, mostra onboarding
+    if (!profile?.name || !profile?.age || !profile?.weight) {
       setShowOnboarding(true)
     }
-  }, [preferences])
+  }, [profile])
   
   // Se deve mostrare onboarding, mostra solo quello
   if (showOnboarding) {
