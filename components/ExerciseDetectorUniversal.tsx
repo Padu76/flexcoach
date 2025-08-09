@@ -363,8 +363,8 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     }
     
     // Play sound
-    if (audioEnabled && sounds?.serieCompletata) {
-      sounds.serieCompletata()
+    if (audioEnabled && sounds?.stop) {
+      sounds.stop()
     }
     
     // Clear inactivity timer
