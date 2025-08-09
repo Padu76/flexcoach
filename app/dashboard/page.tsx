@@ -39,18 +39,17 @@ function DashboardContent() {
   const section = searchParams.get('section') || 'overview'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('squat')
-  const { exportData, importData, dataManager } = useDataManager()
+  const { exportData, importData, profile, preferences, updateAppPreferences } = useDataManager()
   
   // Check se mostrare onboarding
   const [showOnboarding, setShowOnboarding] = useState(false)
   
   useEffect(() => {
     // Controlla se l'onboarding è stato completato
-    const data = dataManager.getData()
-    if (!data.preferences?.onboardingCompleted) {
+    if (!preferences?.onboardingCompleted) {
       setShowOnboarding(true)
     }
-  }, [dataManager])
+  }, [preferences])
   
   // Se deve mostrare onboarding, mostra solo quello
   if (showOnboarding) {
