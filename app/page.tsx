@@ -184,13 +184,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Sezione PANCA con Parallax */}
+      {/* Sezione PANCA con Parallax - IMMAGINE CORRETTA FLAT BENCH PRESS */}
       <section id="bench" className="relative min-h-screen flex items-center">
-        {/* Background Image */}
+        {/* Background Image - FLAT BENCH PRESS WITH BARBELL */}
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?q=80&w=2069')`,
+            backgroundImage: `url('https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=2070')`,
             transform: `translateY(${(scrollY - 1600) * 0.3}px)`,
           }}
         >
