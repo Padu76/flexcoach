@@ -56,7 +56,51 @@ function DashboardContent() {
   if (showOnboarding) {
     return (
       <OnboardingFlow 
-        onComplete={() => {
+        onComplete={(onboardingData) => {
+          // Qui salviamo i dati usando localStorage direttamente
+          // visto che non abbiamo accesso ai metodi di update
+          const currentData = localStorage.getItem('flexcoach_data')
+          const data = currentData ? JSON.parse(currentData) : {}
+          
+          // Aggiorna il profilo
+          data.profile = {
+            ...data.profile,
+            name: onboardingData.name,
+            age: onboardingData.age,
+            weight: onboardingData.weight,
+            height: onboardingData.height,
+            gender: onboardingData.gender,
+            experienceLevel: onboardingData.experienceLevel,
+            goals: onboardingData.goals,
+            weeklyTrainingDays: onboardingData.weeklyTrainingDays
+          }
+          
+          // Salva calibrazioni
+          data.calibration = {
+            squat: {
+              exerciseType: 'squat',
+              maxWeight: onboardingData.squatMax,
+              lastTested: new Date().toISOString(),
+              reps: 1,
+              rpe: 10
+            },
+            'bench-press': {
+              exerciseType: 'bench-press',
+              maxWeight: onboardingData.benchMax,
+              lastTested: new Date().toISOString(),
+              reps: 1,
+              rpe: 10
+            },
+            deadlift: {
+              exerciseType: 'deadlift',
+              maxWeight: onboardingData.deadliftMax,
+              lastTested: new Date().toISOString(),
+              reps: 1,
+              rpe: 10
+            }
+          }
+          
+          localStorage.setItem('flexcoach_data', JSON.stringify(data))
           setShowOnboarding(false)
           // Ricarica la pagina per aggiornare i dati
           window.location.reload()
