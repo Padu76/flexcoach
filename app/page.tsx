@@ -1,419 +1,524 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { 
-  PlayCircleIcon, 
-  CameraIcon, 
-  ChartBarIcon, 
+  PlayCircleIcon,
+  ChartBarIcon,
   ShieldCheckIcon,
-  UserGroupIcon,
+  FireIcon,
   TrophyIcon,
   SparklesIcon,
-  BoltIcon,
-  AdjustmentsHorizontalIcon,
-  ChevronRightIcon,
-  Bars3Icon,
-  XMarkIcon,
-  UserCircleIcon,
-  Cog6ToothIcon,
-  ArrowRightOnRectangleIcon,
-  HomeIcon
+  ArrowRightIcon,
+  CheckCircleIcon,
+  UserGroupIcon,
+  AcademicCapIcon,
+  HeartIcon,
+  LightBulbIcon
 } from '@heroicons/react/24/outline'
-import { useState } from 'react'
 
 export default function HomePage() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  
+  const [scrollY, setScrollY] = useState(0)
+  const [isVisible, setIsVisible] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY)
+      
+      // Check visibility of sections
+      const sections = ['hero', 'squat', 'bench', 'deadlift', 'features', 'cta']
+      const newVisibility: Record<string, boolean> = {}
+      
+      sections.forEach(section => {
+        const element = document.getElementById(section)
+        if (element) {
+          const rect = element.getBoundingClientRect()
+          newVisibility[section] = rect.top < window.innerHeight * 0.75
+        }
+      })
+      
+      setIsVisible(newVisibility)
+    }
+
+    handleScroll()
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   return (
-    <div className="min-h-screen">
-      {/* Navigation Header */}
-      <nav className="bg-white shadow-sm fixed w-full top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo - Always links to home */}
-            <Link href="/" className="flex items-center">
-              <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                FlexCoach
-              </span>
-            </Link>
-            
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-gray-700 hover:text-blue-600 flex items-center gap-1">
-                <HomeIcon className="w-4 h-4" />
-                Home
-              </Link>
-              <Link href="/exercises" className="text-gray-700 hover:text-blue-600">
-                Esercizi
-              </Link>
-              <Link href="/dashboard" className="text-gray-700 hover:text-blue-600">
-                Dashboard
-              </Link>
-              <Link href="/dashboard?section=profile" className="text-gray-700 hover:text-blue-600">
-                Profilo
-              </Link>
-            </div>
-            
-            {/* Desktop Menu Right */}
-            <div className="hidden md:flex items-center space-x-4">
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                <UserCircleIcon className="w-6 h-6" />
-              </button>
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                <Cog6ToothIcon className="w-6 h-6" />
-              </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                Accedi
-              </button>
-            </div>
-            
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2"
-            >
-              {isMobileMenuOpen ? (
-                <XMarkIcon className="w-6 h-6" />
-              ) : (
-                <Bars3Icon className="w-6 h-6" />
-              )}
-            </button>
-          </div>
+    <div className="min-h-screen bg-black text-white overflow-x-hidden">
+      {/* Hero Section con Parallax */}
+      <section 
+        id="hero"
+        className="relative h-screen flex items-center justify-center overflow-hidden"
+      >
+        {/* Background Image con Parallax */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2070')`,
+            transform: `translateY(${scrollY * 0.5}px)`,
+          }}
+        >
+          {/* Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/70" />
         </div>
-        
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden bg-white border-t">
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              <Link href="/" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
-                Home
-              </Link>
-              <Link href="/exercises" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
-                Esercizi
-              </Link>
-              <Link href="/dashboard" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
-                Dashboard
-              </Link>
-              <Link href="/dashboard?section=profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
-                Profilo
-              </Link>
-              <button className="w-full text-left px-3 py-2 text-blue-600 font-medium">
-                Accedi
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-      
-      {/* Spacing for fixed nav */}
-      <div className="h-16"></div>
-      
-      {/* Hero Section */}
-      <section className="bg-gradient-to-b from-blue-600 via-blue-700 to-indigo-800 text-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6">
-              Perfeziona la Tua Forma con<br />
-              <span className="text-blue-200">Coaching Intelligente AI</span>
-            </h1>
-            <p className="text-xl mb-8 text-blue-100 max-w-3xl mx-auto">
-              Ricevi feedback in tempo reale sulla tua tecnica di squat, panca piana e stacco da terra. 
-              FlexCoach usa il rilevamento posturale avanzato per aiutarti ad allenarti in sicurezza ed efficacia.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                href="/exercises"
-                className="inline-flex items-center px-8 py-4 bg-white text-blue-600 font-medium rounded-lg hover:bg-gray-100 transition-colors shadow-lg"
-              >
-                <PlayCircleIcon className="w-6 h-6 mr-2" />
-                Inizia l'Allenamento
-              </Link>
-              <Link 
-                href="/exercises/squat"
-                className="inline-flex items-center px-8 py-4 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-400 transition-colors shadow-lg"
-              >
-                <CameraIcon className="w-6 h-6 mr-2" />
-                Prova Subito
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Why Choose FlexCoach Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Perché Scegliere FlexCoach?
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              La tecnologia AI avanzata incontra l'expertise fitness per darti il compagno di allenamento perfetto
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                <SparklesIcon className="w-6 h-6 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                AI Personalizzata
-              </h3>
-              <p className="text-gray-600">
-                Sistema che apprende le tue caratteristiche uniche e si adatta al tuo livello
-              </p>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                <ShieldCheckIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Prevenzione Infortuni
-              </h3>
-              <p className="text-gray-600">
-                Monitoraggio real-time dei pattern di rischio con alert immediati
-              </p>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                <ChartBarIcon className="w-6 h-6 text-purple-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Analytics Avanzate
-              </h3>
-              <p className="text-gray-600">
-                Dashboard dettagliata con grafici progressi e statistiche performance
-              </p>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
-                <BoltIcon className="w-6 h-6 text-orange-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Feedback Istantaneo
-              </h3>
-              <p className="text-gray-600">
-                Correzioni in tempo reale con feedback audio e visivo durante l'esercizio
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Big 3 Exercises Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Padroneggia i Big 3
-            </h2>
-            <p className="text-xl text-gray-600">
-              Perfeziona la tua tecnica sui movimenti composti più importanti
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Squat Card */}
-            <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-xl text-white overflow-hidden">
-              <div className="p-8">
-                <h3 className="text-2xl font-bold mb-2">Squat</h3>
-                <p className="text-blue-100 mb-6">Base parte inferiore</p>
-                <p className="text-sm mb-6 text-blue-50">
-                  Perfeziona la profondità dello squat, il tracking delle ginocchia e la posizione della schiena. 
-                  Ricevi avvisi per ginocchia in avanti e schiena curvata.
-                </p>
-                <Link 
-                  href="/exercises/squat"
-                  className="inline-flex items-center px-6 py-3 bg-white text-blue-600 font-medium rounded-lg hover:bg-blue-50 transition-colors"
-                >
-                  Pratica Squat
-                  <ChevronRightIcon className="w-4 h-4 ml-2" />
-                </Link>
-              </div>
-            </div>
-            
-            {/* Bench Press Card */}
-            <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl shadow-xl text-white overflow-hidden">
-              <div className="p-8">
-                <h3 className="text-2xl font-bold mb-2">Panca Piana</h3>
-                <p className="text-green-100 mb-6">Potenza parte superiore</p>
-                <p className="text-sm mb-6 text-green-50">
-                  Ottimizza la tua panca piana con la posizione corretta dei gomiti, retrazione scapolare 
-                  e analisi del percorso del bilanciere.
-                </p>
-                <Link 
-                  href="/exercises/bench-press"
-                  className="inline-flex items-center px-6 py-3 bg-white text-green-600 font-medium rounded-lg hover:bg-green-50 transition-colors"
-                >
-                  Pratica Panca
-                  <ChevronRightIcon className="w-4 h-4 ml-2" />
-                </Link>
-              </div>
-            </div>
-            
-            {/* Deadlift Card */}
-            <div className="bg-gradient-to-br from-amber-600 to-orange-700 rounded-2xl shadow-xl text-white overflow-hidden">
-              <div className="p-8">
-                <h3 className="text-2xl font-bold mb-2">Stacco da Terra</h3>
-                <p className="text-orange-100 mb-6">Forza total body</p>
-                <p className="text-sm mb-6 text-orange-50">
-                  Padroneggia la forma dello stacco con controlli allineamento spinale, 
-                  tracking posizione bilanciere e analisi del movimento dell'anca.
-                </p>
-                <Link 
-                  href="/exercises/deadlift"
-                  className="inline-flex items-center px-6 py-3 bg-white text-orange-600 font-medium rounded-lg hover:bg-orange-50 transition-colors"
-                >
-                  Pratica Stacco
-                  <ChevronRightIcon className="w-4 h-4 ml-2" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Advanced Features Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Funzionalità Avanzate
-            </h2>
-            <p className="text-xl text-gray-600">
-              Tutto ciò che serve per ottimizzare il tuo allenamento
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <AdjustmentsHorizontalIcon className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Calibrazione Personalizzata
-                </h3>
-                <p className="text-gray-600">
-                  Sistema di calibrazione in 5 step che adatta le soglie di sicurezza e performance alle tue caratteristiche uniche
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <TrophyIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Tracking Obiettivi
-                </h3>
-                <p className="text-gray-600">
-                  Imposta e monitora i tuoi obiettivi di forza, massa o resistenza con progress tracking automatico
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <UserGroupIcon className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Calcolo Peso Ottimale
-                </h3>
-                <p className="text-gray-600">
-                  AI che calcola il peso perfetto basandosi su storico, obiettivi e forma attuale
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <CameraIcon className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Auto-Detect Vista
-                </h3>
-                <p className="text-gray-600">
-                  Riconoscimento automatico se sei di fronte o di lato con analisi adattiva
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-indigo-600">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-            Inizia il Tuo Percorso di Miglioramento
-          </h2>
-          <p className="text-xl text-blue-100 mb-8">
-            Unisciti a migliaia di atleti che stanno già migliorando la loro tecnica con FlexCoach
+
+        {/* Content */}
+        <div className={`relative z-10 text-center px-4 max-w-4xl mx-auto transition-all duration-1000 ${
+          isVisible.hero ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}>
+          <h1 className="text-6xl md:text-8xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+            FlexCoach
+          </h1>
+          <p className="text-xl md:text-2xl mb-8 text-gray-300">
+            Il tuo AI Personal Trainer per Squat, Panca e Stacco
+          </p>
+          <p className="text-lg mb-12 text-gray-400 max-w-2xl mx-auto">
+            Correzione della forma in tempo reale con intelligenza artificiale avanzata. 
+            Migliora la tua tecnica, previeni infortuni, raggiungi i tuoi obiettivi.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 
               href="/dashboard"
-              className="inline-flex items-center px-8 py-4 bg-white text-blue-600 font-medium rounded-lg hover:bg-gray-100 transition-colors shadow-lg"
-            >
-              <ChartBarIcon className="w-6 h-6 mr-2" />
-              Vai alla Dashboard
-            </Link>
-            <Link 
-              href="/exercises"
-              className="inline-flex items-center px-8 py-4 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-400 transition-colors shadow-lg"
+              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-2xl"
             >
               <PlayCircleIcon className="w-6 h-6 mr-2" />
-              Inizia Subito
+              Inizia Gratis
+            </Link>
+            <Link 
+              href="/trainer"
+              className="inline-flex items-center px-8 py-4 bg-white/10 backdrop-blur text-white rounded-full hover:bg-white/20 transition-all border border-white/30"
+            >
+              <UserGroupIcon className="w-6 h-6 mr-2" />
+              Sono un Trainer
             </Link>
           </div>
         </div>
+
+        {/* Scroll Indicator */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
+          <div className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center">
+            <div className="w-1 h-3 bg-white/50 rounded-full mt-2 animate-pulse" />
+          </div>
+        </div>
       </section>
-      
+
+      {/* Sezione SQUAT con Parallax */}
+      <section id="squat" className="relative min-h-screen flex items-center">
+        {/* Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1574680096145-d05b474e2155?q=80&w=2069')`,
+            transform: `translateY(${(scrollY - 800) * 0.3}px)`,
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-black/90 to-black/60" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 container mx-auto px-6 py-20">
+          <div className={`grid md:grid-cols-2 gap-12 items-center transition-all duration-1000 delay-200 ${
+            isVisible.squat ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'
+          }`}>
+            <div>
+              <span className="inline-block px-4 py-1 bg-blue-600/20 text-blue-400 rounded-full text-sm mb-4">
+                Esercizio Fondamentale
+              </span>
+              <h2 className="text-5xl md:text-6xl font-bold mb-6">
+                <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                  Squat
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300 mb-6">
+                Il re degli esercizi per le gambe. FlexCoach analizza la tua postura in tempo reale 
+                per garantire la profondità perfetta e proteggere le tue ginocchia.
+              </p>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Rilevamento profondità automatico</span>
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Controllo allineamento ginocchia</span>
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Analisi curva lombare</span>
+                </li>
+              </ul>
+              <Link 
+                href="/exercises/squat/pre-workout"
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all transform hover:scale-105"
+              >
+                Prova Squat
+                <ArrowRightIcon className="w-4 h-4 ml-2" />
+              </Link>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 blur-3xl" />
+              <div className="relative bg-gradient-to-br from-blue-600/10 to-purple-600/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-blue-400">15°</div>
+                    <div className="text-sm text-gray-400">Angolo ideale</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-green-400">98%</div>
+                    <div className="text-sm text-gray-400">Precisione AI</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-purple-400">0.1s</div>
+                    <div className="text-sm text-gray-400">Tempo risposta</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-cyan-400">17</div>
+                    <div className="text-sm text-gray-400">Punti tracciati</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sezione PANCA con Parallax */}
+      <section id="bench" className="relative min-h-screen flex items-center">
+        {/* Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1534368420009-621bfab424a8?q=80&w=2070')`,
+            transform: `translateY(${(scrollY - 1600) * 0.3}px)`,
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-l from-black/90 to-black/60" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 container mx-auto px-6 py-20">
+          <div className={`grid md:grid-cols-2 gap-12 items-center transition-all duration-1000 delay-200 ${
+            isVisible.bench ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-10'
+          }`}>
+            <div className="order-2 md:order-1">
+              <div className="relative">
+                <div className="absolute -inset-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 blur-3xl" />
+                <div className="relative bg-gradient-to-br from-green-600/10 to-emerald-600/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-3xl font-bold text-green-400">45°</div>
+                      <div className="text-sm text-gray-400">Angolo gomiti</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-3xl font-bold text-emerald-400">ROM</div>
+                      <div className="text-sm text-gray-400">Range completo</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-3xl font-bold text-teal-400">Grip</div>
+                      <div className="text-sm text-gray-400">Larghezza presa</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-3xl font-bold text-cyan-400">Arco</div>
+                      <div className="text-sm text-gray-400">Setup schiena</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="order-1 md:order-2 text-right">
+              <span className="inline-block px-4 py-1 bg-green-600/20 text-green-400 rounded-full text-sm mb-4">
+                Upper Body Power
+              </span>
+              <h2 className="text-5xl md:text-6xl font-bold mb-6">
+                <span className="bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  Panca Piana
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300 mb-6">
+                Costruisci petto e tricipiti con la forma perfetta. L'AI monitora la traiettoria 
+                del bilanciere e l'angolo dei gomiti per massimizzare i risultati.
+              </p>
+              <ul className="space-y-3 mb-8 text-left md:text-right">
+                <li className="flex items-center md:justify-end">
+                  <span className="text-gray-300 order-2 md:order-1">Traiettoria bilanciere ottimale</span>
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mx-3 order-1 md:order-2" />
+                </li>
+                <li className="flex items-center md:justify-end">
+                  <span className="text-gray-300 order-2 md:order-1">Controllo tempo eccentrico</span>
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mx-3 order-1 md:order-2" />
+                </li>
+                <li className="flex items-center md:justify-end">
+                  <span className="text-gray-300 order-2 md:order-1">Protezione spalle e polsi</span>
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mx-3 order-1 md:order-2" />
+                </li>
+              </ul>
+              <Link 
+                href="/exercises/bench-press/pre-workout"
+                className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all transform hover:scale-105"
+              >
+                Prova Panca
+                <ArrowRightIcon className="w-4 h-4 ml-2" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sezione STACCO con Parallax */}
+      <section id="deadlift" className="relative min-h-screen flex items-center">
+        {/* Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1517963879433-6ad2b056d712?q=80&w=2070')`,
+            transform: `translateY(${(scrollY - 2400) * 0.3}px)`,
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-black/90 to-black/60" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 container mx-auto px-6 py-20">
+          <div className={`grid md:grid-cols-2 gap-12 items-center transition-all duration-1000 delay-200 ${
+            isVisible.deadlift ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'
+          }`}>
+            <div>
+              <span className="inline-block px-4 py-1 bg-orange-600/20 text-orange-400 rounded-full text-sm mb-4">
+                Total Body Strength
+              </span>
+              <h2 className="text-5xl md:text-6xl font-bold mb-6">
+                <span className="bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+                  Stacco da Terra
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300 mb-6">
+                L'esercizio definitivo per la forza totale. FlexCoach protegge la tua schiena 
+                monitorando la posizione neutrale della colonna durante tutto il movimento.
+              </p>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Protezione lombare intelligente</span>
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Hip hinge perfetto</span>
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="w-5 h-5 text-green-400 mr-3" />
+                  <span className="text-gray-300">Lockout e setup ottimali</span>
+                </li>
+              </ul>
+              <Link 
+                href="/exercises/deadlift/pre-workout"
+                className="inline-flex items-center px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all transform hover:scale-105"
+              >
+                Prova Stacco
+                <ArrowRightIcon className="w-4 h-4 ml-2" />
+              </Link>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-4 bg-gradient-to-r from-orange-600/20 to-red-600/20 blur-3xl" />
+              <div className="relative bg-gradient-to-br from-orange-600/10 to-red-600/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-orange-400">Neutral</div>
+                    <div className="text-sm text-gray-400">Spine position</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-red-400">100%</div>
+                    <div className="text-sm text-gray-400">Safety score</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-yellow-400">Hip</div>
+                    <div className="text-sm text-gray-400">Drive power</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-amber-400">Lock</div>
+                    <div className="text-sm text-gray-400">Full extension</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="relative py-20 bg-gradient-to-b from-black to-gray-950">
+        <div className={`container mx-auto px-6 transition-all duration-1000 ${
+          isVisible.features ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}>
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">
+              Perché Scegliere{' '}
+              <span className="bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+                FlexCoach
+              </span>
+            </h2>
+            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+              Tecnologia all'avanguardia per il tuo allenamento perfetto
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              {
+                icon: <LightBulbIcon className="w-8 h-8" />,
+                title: 'AI Avanzata',
+                description: 'Rilevamento pose in tempo reale con TensorFlow.js',
+                color: 'from-blue-600 to-cyan-600'
+              },
+              {
+                icon: <ShieldCheckIcon className="w-8 h-8" />,
+                title: 'Prevenzione Infortuni',
+                description: 'Alert automatici per posture pericolose',
+                color: 'from-green-600 to-emerald-600'
+              },
+              {
+                icon: <ChartBarIcon className="w-8 h-8" />,
+                title: 'Progress Tracking',
+                description: 'Statistiche dettagliate e progressi misurabili',
+                color: 'from-purple-600 to-pink-600'
+              },
+              {
+                icon: <AcademicCapIcon className="w-8 h-8" />,
+                title: 'Calibrazione Smart',
+                description: 'Pesi ottimali calcolati sul tuo livello',
+                color: 'from-orange-600 to-red-600'
+              }
+            ].map((feature, index) => (
+              <div key={index} className="relative group">
+                <div className={`absolute -inset-1 bg-gradient-to-r ${feature.color} rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500`} />
+                <div className="relative bg-gray-900/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all">
+                  <div className={`inline-flex p-3 rounded-lg bg-gradient-to-r ${feature.color} mb-4`}>
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-gray-400">{feature.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Extra Features */}
+          <div className="grid md:grid-cols-3 gap-8 mt-12">
+            <div className="text-center">
+              <FireIcon className="w-12 h-12 mx-auto mb-4 text-orange-400" />
+              <h3 className="text-lg font-semibold mb-2">Counter Automatico</h3>
+              <p className="text-gray-400">Conta le ripetizioni automaticamente</p>
+            </div>
+            <div className="text-center">
+              <HeartIcon className="w-12 h-12 mx-auto mb-4 text-red-400" />
+              <h3 className="text-lg font-semibold mb-2">Qualità Rep</h3>
+              <p className="text-gray-400">Valutazione per ogni ripetizione</p>
+            </div>
+            <div className="text-center">
+              <TrophyIcon className="w-12 h-12 mx-auto mb-4 text-yellow-400" />
+              <h3 className="text-lg font-semibold mb-2">Achievements</h3>
+              <p className="text-gray-400">Sblocca obiettivi e migliora</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section id="cta" className="relative py-20 bg-gradient-to-b from-gray-950 to-black">
+        <div className={`container mx-auto px-6 text-center transition-all duration-1000 ${
+          isVisible.cta ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}>
+          <SparklesIcon className="w-16 h-16 mx-auto mb-6 text-yellow-400" />
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            Inizia il Tuo Viaggio Verso la{' '}
+            <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+              Forma Perfetta
+            </span>
+          </h2>
+          <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
+            Unisciti a migliaia di atleti che hanno migliorato la loro tecnica con FlexCoach. 
+            Gratis per sempre, nessuna carta di credito richiesta.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link 
+              href="/dashboard"
+              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-400 text-black font-semibold rounded-full hover:from-yellow-500 hover:to-orange-500 transition-all transform hover:scale-105 shadow-2xl"
+            >
+              <PlayCircleIcon className="w-6 h-6 mr-2" />
+              Inizia Ora - È Gratis!
+            </Link>
+            <Link 
+              href="/exercises"
+              className="inline-flex items-center px-8 py-4 bg-white/10 backdrop-blur text-white rounded-full hover:bg-white/20 transition-all border border-white/30"
+            >
+              Esplora Esercizi
+              <ArrowRightIcon className="w-4 h-4 ml-2" />
+            </Link>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="mt-16 flex flex-wrap justify-center gap-8 text-gray-500">
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon className="w-5 h-5" />
+              <span>100% Gratuito</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon className="w-5 h-5" />
+              <span>No Carta di Credito</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon className="w-5 h-5" />
+              <span>Privacy Garantita</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon className="w-5 h-5" />
+              <span>Cancella Quando Vuoi</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="bg-black border-t border-gray-900 py-12">
+        <div className="container mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-2xl font-bold mb-4">FlexCoach</h3>
-              <p className="text-gray-400">
-                Il tuo AI personal trainer per squat, panca e stacco perfetti.
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent mb-4">
+                FlexCoach
+              </h3>
+              <p className="text-gray-400 text-sm">
+                AI-powered fitness coaching per squat, panca e stacco. 
+                Migliora la tua forma, previeni infortuni.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Esercizi</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><Link href="/exercises/squat" className="hover:text-white">Squat</Link></li>
-                <li><Link href="/exercises/bench-press" className="hover:text-white">Panca Piana</Link></li>
-                <li><Link href="/exercises/deadlift" className="hover:text-white">Stacco da Terra</Link></li>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li><Link href="/exercises/squat/pre-workout" className="hover:text-white">Squat</Link></li>
+                <li><Link href="/exercises/bench-press/pre-workout" className="hover:text-white">Panca Piana</Link></li>
+                <li><Link href="/exercises/deadlift/pre-workout" className="hover:text-white">Stacco da Terra</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Features</h4>
-              <ul className="space-y-2 text-gray-400">
+              <h4 className="font-semibold mb-4">Prodotto</h4>
+              <ul className="space-y-2 text-gray-400 text-sm">
                 <li><Link href="/dashboard" className="hover:text-white">Dashboard</Link></li>
-                <li><Link href="/dashboard?section=profile" className="hover:text-white">Profilo</Link></li>
-                <li><Link href="/dashboard?section=performance" className="hover:text-white">Performance</Link></li>
+                <li><Link href="/trainer" className="hover:text-white">Per Trainer</Link></li>
+                <li><Link href="#features" className="hover:text-white">Features</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Supporto</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><a href="#" className="hover:text-white">Guide</a></li>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li><a href="#" className="hover:text-white">Guida</a></li>
                 <li><a href="#" className="hover:text-white">FAQ</a></li>
                 <li><a href="#" className="hover:text-white">Contatti</a></li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 FlexCoach. Tutti i diritti riservati.</p>
+          <div className="mt-8 pt-8 border-t border-gray-900 text-center text-gray-400 text-sm">
+            <p>© {new Date().getFullYear()} FlexCoach. Tutti i diritti riservati.</p>
           </div>
         </div>
       </footer>
