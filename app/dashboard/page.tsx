@@ -29,6 +29,7 @@ const UserProfileSystem = dynamic(() => import('@/components/UserProfileSystem')
 const PerformanceDashboard = dynamic(() => import('@/components/PerformanceDashboard'), { ssr: false })
 const WeightPredictionSystem = dynamic(() => import('@/components/WeightPredictionSystem'), { ssr: false })
 const InjuryPreventionSystem = dynamic(() => import('@/components/InjuryPreventionSystem'), { ssr: false })
+const OnboardingFlow = dynamic(() => import('@/components/OnboardingFlow'), { ssr: false })
 
 type ExerciseType = 'squat' | 'bench-press' | 'deadlift'
 
@@ -38,7 +39,32 @@ function DashboardContent() {
   const section = searchParams.get('section') || 'overview'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('squat')
-  const { exportData, importData } = useDataManager()
+  const { exportData, importData, dataManager } = useDataManager()
+  
+  // Check se mostrare onboarding
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  
+  useEffect(() => {
+    // Controlla se l'onboarding è stato completato
+    const data = dataManager.getData()
+    if (!data.preferences?.onboardingCompleted) {
+      setShowOnboarding(true)
+    }
+  }, [dataManager])
+  
+  // Se deve mostrare onboarding, mostra solo quello
+  if (showOnboarding) {
+    return (
+      <OnboardingFlow 
+        onComplete={() => {
+          setShowOnboarding(false)
+          // Ricarica la pagina per aggiornare i dati
+          window.location.reload()
+        }}
+        onSkip={() => setShowOnboarding(false)}
+      />
+    )
+  }
   
   // Sidebar items
   const sidebarItems = [
@@ -190,6 +216,13 @@ function DashboardContent() {
                     className="hidden"
                   />
                 </label>
+                <button
+                  onClick={() => setShowOnboarding(true)}
+                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <UserCircleIcon className="w-5 h-5 mr-2" />
+                  Rifai Calibrazione
+                </button>
               </div>
             </div>
           </div>
@@ -261,11 +294,6 @@ function DashboardContent() {
               <Link href="/dashboard?section=profile" className="text-gray-700 hover:text-blue-600">
                 Profilo
               </Link>
-              <div className="w-px h-6 bg-gray-300" />
-              <Link href="/trainer" className="text-gray-700 hover:text-purple-600 flex items-center gap-1 font-medium">
-                <span className="text-lg">👨‍🏫</span>
-                Trainer
-              </Link>
             </div>
             
             {/* Desktop Menu Right */}
@@ -311,10 +339,6 @@ function DashboardContent() {
               </Link>
               <Link href="/dashboard?section=profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                 Profilo
-              </Link>
-              <div className="border-t border-gray-200 my-2"></div>
-              <Link href="/trainer" className="block px-3 py-2 text-purple-600 hover:bg-purple-50 rounded font-medium">
-                👨‍🏫 Trainer Dashboard
               </Link>
               <button className="w-full text-left px-3 py-2 text-blue-600 font-medium">
                 Accedi
