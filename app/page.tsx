@@ -190,7 +190,7 @@ export default function HomePage() {
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1534368420009-621bfab424a8?q=80&w=2070')`,
+            backgroundImage: `url('https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=2070')`,
             transform: `translateY(${(scrollY - 1600) * 0.3}px)`,
           }}
         >
