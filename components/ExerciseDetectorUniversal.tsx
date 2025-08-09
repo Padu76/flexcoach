@@ -1,4 +1,4 @@
-// components/ExerciseDetectorUniversal.tsx - CON TRACKING REALE POSENET
+// components/ExerciseDetectorUniversal.tsx - CON FULLSCREEN E REPORT SERIE
 
 'use client'
 
@@ -27,8 +27,17 @@ import {
   CameraIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon,
-  XCircleIcon
+  XCircleIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
+  ClockIcon,
+  StarIcon,
+  TrophyIcon,
+  LightBulbIcon,
+  DocumentDuplicateIcon,
+  ShareIcon
 } from '@heroicons/react/24/outline'
+import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import type { ExerciseType } from '@/types'
 
 interface Props {
@@ -44,6 +53,26 @@ interface InjuryAlert {
   bodyPart: string
   timestamp: number
   autopaused?: boolean
+}
+
+// Tipo per il report serie
+interface SetReport {
+  totalReps: number
+  perfectReps: number
+  goodReps: number
+  fairReps: number
+  poorReps: number
+  timeUnderTension: number
+  averageRepTime: number
+  averageROM: number
+  averageSymmetry: number
+  totalVolume: number
+  issues: {
+    rep: number
+    issue: string
+  }[]
+  suggestion: string
+  overallScore: number
 }
 
 export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
@@ -90,7 +119,18 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [formQuality, setFormQuality] = useState(100)
   const [currentWeight, setCurrentWeight] = useState(50)
   
-  // NUOVI STATI PER COUNTER AUTOMATICO RIPETIZIONI
+  // NUOVI STATI PER FULLSCREEN E REPORT
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showSetReport, setShowSetReport] = useState(false)
+  const [currentSetReport, setCurrentSetReport] = useState<SetReport | null>(null)
+  const [inactivityTimer, setInactivityTimer] = useState(0)
+  const [autoEndSetEnabled, setAutoEndSetEnabled] = useState(true)
+  const [setStartTime, setSetStartTime] = useState(0)
+  const [repTimestamps, setRepTimestamps] = useState<number[]>([])
+  const [repQualities, setRepQualities] = useState<Array<'perfect' | 'good' | 'fair' | 'poor'>>([])
+  const [repIssues, setRepIssues] = useState<Array<{rep: number, issue: string}>>([])
+  
+  // Stati counter automatico
   const [movementPhase, setMovementPhase] = useState<'ready' | 'descending' | 'bottom' | 'ascending' | 'top'>('ready')
   const [repQuality, setRepQuality] = useState<'perfect' | 'good' | 'fair' | 'poor'>('good')
   const [currentRepStartTime, setCurrentRepStartTime] = useState(0)
@@ -99,16 +139,16 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const [goodReps, setGoodReps] = useState(0)
   const [fairReps, setFairReps] = useState(0)
   const [poorReps, setPoorReps] = useState(0)
-  const [lastPosition, setLastPosition] = useState(0) // 0-100, 0=top, 100=bottom
+  const [lastPosition, setLastPosition] = useState(0)
   const [currentPosition, setCurrentPosition] = useState(0)
   const [velocityTracking, setVelocityTracking] = useState<number[]>([])
   const [isInProperForm, setIsInProperForm] = useState(true)
   
-  // NUOVI STATI PER ALERT INFORTUNI
+  // Stati alert infortuni
   const [injuryAlertsEnabled, setInjuryAlertsEnabled] = useState(true)
   const [currentAlert, setCurrentAlert] = useState<InjuryAlert | null>(null)
   const [alertHistory, setAlertHistory] = useState<InjuryAlert[]>([])
-  const [postureScore, setPostureScore] = useState(100) // 0-100, 100 = perfetto
+  const [postureScore, setPostureScore] = useState(100)
   const [consecutiveDangerFrames, setConsecutiveDangerFrames] = useState(0)
   const [wasAutoPaused, setWasAutoPaused] = useState(false)
   const [currentPostureIssues, setCurrentPostureIssues] = useState<Array<{
@@ -120,11 +160,13 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const sessionStarted = useRef(false)
   const totalRepsSession = useRef(0)
   const perfectRepsCount = useRef(0)
   const alertTimeoutRef = useRef<NodeJS.Timeout>()
   const dangerSoundPlayedRef = useRef(false)
+  const inactivityTimeoutRef = useRef<NodeJS.Timeout>()
   
   // Sound feedback hook
   const { 
@@ -153,7 +195,23 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     onRepComplete: (rep) => {
       console.log('Rep completata:', rep)
       
-      // Aggiorna contatori basati su qualità
+      // Reset inactivity timer
+      setInactivityTimer(0)
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current)
+      }
+      
+      // Track rep timestamp e quality
+      setRepTimestamps(prev => [...prev, Date.now()])
+      setRepQualities(prev => [...prev, rep.quality])
+      
+      // Track issues
+      if (rep.quality === 'poor' || rep.quality === 'fair') {
+        const issueMessage = poseFormAnalysis?.issues[0] || 'Forma da migliorare'
+        setRepIssues(prev => [...prev, { rep: poseRepCount, issue: issueMessage }])
+      }
+      
+      // Aggiorna contatori
       totalRepsSession.current++
       setRepsCount(poseRepCount)
       setCurrentSetCount(prev => prev + 1)
@@ -189,6 +247,15 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       if (poseRepCount % 10 === 0 && audioEnabled && sounds?.dieciReps) {
         setTimeout(() => sounds.dieciReps(), 500)
       }
+      
+      // Start inactivity timer per auto-end set
+      if (autoEndSetEnabled) {
+        inactivityTimeoutRef.current = setTimeout(() => {
+          if (currentSetCount > 0) {
+            handleEndSet()
+          }
+        }, 5000) // 5 secondi di inattività
+      }
     },
     onPhaseChange: (phase) => {
       console.log('Cambio fase:', phase)
@@ -198,6 +265,172 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
                        phase.phase === 'top' ? 'top' : 'ready')
     }
   })
+  
+  // FUNZIONI FULLSCREEN
+  const enterFullscreen = useCallback(() => {
+    if (containerRef.current && !document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => {
+        setIsFullscreen(true)
+      }).catch(err => {
+        console.error('Errore fullscreen:', err)
+      })
+    }
+  }, [])
+  
+  const exitFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false)
+      })
+    }
+  }, [])
+  
+  const toggleFullscreen = useCallback(() => {
+    if (isFullscreen) {
+      exitFullscreen()
+    } else {
+      enterFullscreen()
+    }
+  }, [isFullscreen, enterFullscreen, exitFullscreen])
+  
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+  
+  // FUNZIONE GENERA REPORT SERIE
+  const generateSetReport = useCallback((): SetReport => {
+    const timeUnderTension = Date.now() - setStartTime
+    const avgRepTime = repTimestamps.length > 1 
+      ? (repTimestamps[repTimestamps.length - 1] - repTimestamps[0]) / (repTimestamps.length - 1)
+      : 0
+    
+    // Calcola metriche medie (simulato per ora)
+    const avgROM = currentMetrics?.depth || 85
+    const avgSymmetry = currentMetrics?.symmetry || 90
+    
+    // Genera suggerimento basato sulla performance
+    let suggestion = ''
+    if (perfectReps >= currentSetCount * 0.7) {
+      suggestion = "Eccellente serie! Mantieni questa qualità e considera di aumentare il peso di 2.5kg"
+    } else if (goodReps >= currentSetCount * 0.5) {
+      suggestion = "Buona serie! Focus sulla profondità e controllo nelle ultime rep"
+    } else {
+      suggestion = "Serie da migliorare. Riduci il peso o fai pause più lunghe tra le serie"
+    }
+    
+    // Calcola score complessivo
+    const overallScore = Math.round(
+      (perfectReps * 100 + goodReps * 75 + fairReps * 50 + poorReps * 25) / 
+      Math.max(1, currentSetCount)
+    )
+    
+    return {
+      totalReps: currentSetCount,
+      perfectReps,
+      goodReps,
+      fairReps,
+      poorReps,
+      timeUnderTension: timeUnderTension / 1000, // in secondi
+      averageRepTime: avgRepTime / 1000, // in secondi
+      averageROM: avgROM,
+      averageSymmetry: avgSymmetry,
+      totalVolume: currentWeight * currentSetCount,
+      issues: repIssues,
+      suggestion,
+      overallScore
+    }
+  }, [currentSetCount, perfectReps, goodReps, fairReps, poorReps, setStartTime, 
+      repTimestamps, currentWeight, repIssues, currentMetrics])
+  
+  // HANDLER FINE SERIE
+  const handleEndSet = useCallback(() => {
+    if (currentSetCount === 0) return
+    
+    // Genera report
+    const report = generateSetReport()
+    setCurrentSetReport(report)
+    setShowSetReport(true)
+    
+    // Stop tracking temporaneamente
+    if (poseTracking) {
+      stopPoseTracking()
+    }
+    
+    // Play sound
+    if (audioEnabled && sounds?.serieCompletata) {
+      sounds.serieCompletata()
+    }
+    
+    // Clear inactivity timer
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current)
+    }
+  }, [currentSetCount, generateSetReport, poseTracking, stopPoseTracking, 
+      audioEnabled, sounds])
+  
+  // HANDLER SALVA E CONTINUA
+  const handleSaveAndContinue = () => {
+    if (currentSetReport) {
+      // Salva nel workout log
+      addSet({
+        setNumber: (sessions[0]?.sets?.length || 0) + 1,
+        exercise: exerciseType,
+        targetReps: currentSetCount,
+        completedReps: currentSetCount,
+        reps: Array(currentSetCount).fill({ quality: formQuality }),
+        weight: currentWeight,
+        averageQuality: currentSetReport.overallScore,
+        restTime: 0
+      })
+    }
+    
+    // Reset per nuova serie
+    setShowSetReport(false)
+    setCurrentSetReport(null)
+    setRepsCount(0)
+    setCurrentSetCount(0)
+    setPerfectReps(0)
+    setGoodReps(0)
+    setFairReps(0)
+    setPoorReps(0)
+    setRepTimestamps([])
+    setRepQualities([])
+    setRepIssues([])
+    setSetStartTime(Date.now())
+    
+    // Riprendi tracking
+    if (isRunning && !poseTracking) {
+      startPoseTracking()
+    }
+  }
+  
+  // HANDLER RIFAI SERIE
+  const handleRedoSet = () => {
+    setShowSetReport(false)
+    setCurrentSetReport(null)
+    setRepsCount(0)
+    setCurrentSetCount(0)
+    setPerfectReps(0)
+    setGoodReps(0)
+    setFairReps(0)
+    setPoorReps(0)
+    setRepTimestamps([])
+    setRepQualities([])
+    setRepIssues([])
+    setSetStartTime(Date.now())
+    resetPoseTracking()
+    
+    // Riprendi tracking
+    if (isRunning) {
+      startPoseTracking()
+    }
+  }
   
   // Sincronizza rep count da PoseNet
   useEffect(() => {
@@ -237,16 +470,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     }
   }, [poseFormAnalysis, injuryAlertsEnabled, audioEnabled, playBeep])
   
-  // Aggiorna metriche da PoseNet
-  useEffect(() => {
-    if (currentMetrics) {
-      setCurrentPosition(currentMetrics.depth)
-      // Velocity tracking per stability
-      setVelocityTracking(prev => [...prev.slice(-10), currentMetrics.velocity])
-    }
-  }, [currentMetrics])
-  
-  // Setup video e canvas quando il componente monta
+  // Setup video e canvas
   useEffect(() => {
     if (videoRef.current) {
       setupVideoElement(videoRef.current)
@@ -263,62 +487,14 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       const result = startWorkout(exerciseType)
       if (result.success) {
         sessionStarted.current = true
-        setAlertHistory([]) // Reset alert history per nuova sessione
+        setAlertHistory([])
+        setSetStartTime(Date.now())
         console.log('Workout started successfully')
       } else {
         console.error('Failed to start workout:', result.error)
       }
     }
   }, [isRunning, exerciseType, startWorkout])
-  
-  // Salva set quando si mette in pausa o ferma
-  useEffect(() => {
-    if ((isPaused || !isRunning) && currentSetCount > 0 && isActive) {
-      const quality = perfectRepsCount.current / Math.max(1, currentSetCount) * 100
-      console.log('Saving set:', { reps: currentSetCount, weight: currentWeight, quality })
-      
-      const result = addSet({
-        setNumber: 1,
-        exercise: exerciseType,
-        targetReps: currentSetCount,
-        completedReps: currentSetCount,
-        reps: Array(currentSetCount).fill({ quality: formQuality }),
-        weight: currentWeight,
-        averageQuality: formQuality,
-        restTime: 0
-      })
-      
-      if (result.success) {
-        console.log('Set saved successfully')
-        setCurrentSetCount(0)
-        perfectRepsCount.current = 0
-      } else {
-        console.error('Failed to save set:', result.error)
-      }
-    }
-  }, [isPaused, isRunning, currentSetCount, currentWeight, formQuality, isActive, addSet, exerciseType])
-  
-  // Finalizza workout quando il componente si smonta o si ferma
-  useEffect(() => {
-    return () => {
-      if (sessionStarted.current && totalRepsSession.current > 0) {
-        console.log('Finalizing workout:', { 
-          totalReps: totalRepsSession.current, 
-          volume: sessionVolume,
-          alerts: alertHistory.length
-        })
-        
-        const result = endWorkout()
-        
-        if (result.success) {
-          console.log('Workout ended successfully')
-          sessionStarted.current = false
-        } else {
-          console.error('Failed to end workout:', result.error)
-        }
-      }
-    }
-  }, [sessionVolume, alertHistory, endWorkout])
   
   // Handler per start/stop
   const handleStartStop = async () => {
@@ -329,6 +505,11 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       
       // Stop tracking reale
       stopPoseTracking()
+      
+      // Exit fullscreen
+      if (isFullscreen) {
+        exitFullscreen()
+      }
       
       // Salva sessione finale
       if (sessionStarted.current && totalRepsSession.current > 0) {
@@ -361,23 +542,22 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
       setConsecutiveDangerFrames(0)
       setWasAutoPaused(false)
       setCurrentPostureIssues([])
-      // Reset counter automatico
       setMovementPhase('ready')
       setPerfectReps(0)
       setGoodReps(0)
       setFairReps(0)
       setPoorReps(0)
-      setLastPosition(0)
-      setCurrentPosition(0)
-      setVelocityTracking([])
-      setIsInProperForm(true)
-      setRepQuality('good')
-      setRepDuration(0)
       resetPoseTracking()
     } else {
       console.log('Starting workout')
       setIsRunning(true)
       setIsPaused(false)
+      setSetStartTime(Date.now())
+      
+      // Auto-fullscreen se preferito
+      if (preferences?.autoFullscreen) {
+        enterFullscreen()
+      }
       
       // Start tracking reale
       await startPoseTracking()
@@ -389,14 +569,12 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const handlePauseResume = () => {
     if (isPaused) {
       setIsPaused(false)
-      setWasAutoPaused(false) // Reset auto-pause flag quando riprende manualmente
-      // Resume tracking se era in pausa
+      setWasAutoPaused(false)
       if (isRunning && !poseTracking) {
         startPoseTracking()
       }
     } else {
       setIsPaused(true)
-      // Pausa tracking
       if (poseTracking) {
         stopPoseTracking()
       }
@@ -412,25 +590,20 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     setCurrentAlert(null)
     setPostureScore(100)
     setCurrentPostureIssues([])
-    // Reset counter automatico
     setMovementPhase('ready')
     setPerfectReps(0)
     setGoodReps(0)
     setFairReps(0)
     setPoorReps(0)
-    setLastPosition(0)
-    setCurrentPosition(0)
-    setVelocityTracking([])
-    setIsInProperForm(true)
-    setRepQuality('good')
-    setRepDuration(0)
+    setRepTimestamps([])
+    setRepQualities([])
+    setRepIssues([])
     if (audioEnabled && sounds?.start) sounds.start()
   }
   
   const toggleAudio = () => {
     const newState = !audioEnabled
     setAudioEnabled(newState)
-    
     updatePreferences({
       preferredView: 'auto',
       audioEnabled: newState,
@@ -442,7 +615,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const toggleSkeleton = () => {
     const newState = !showSkeleton
     setShowSkeleton(newState)
-    
     updatePreferences({
       preferredView: 'auto',
       audioEnabled,
@@ -454,7 +626,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   const toggleMetrics = () => {
     const newState = !showMetrics
     setShowMetrics(newState)
-    
     updatePreferences({
       preferredView: 'auto',
       audioEnabled,
@@ -501,178 +672,269 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
     </div>
   )
   
-  // Stats Panel con Posture Score e Quality Breakdown
-  const StatsPanel = () => (
-    <div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-        <div className="bg-blue-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-blue-600">{repsCount}</div>
-          <div className="text-xs text-gray-600">Ripetizioni</div>
+  // Stats Panel compatto per fullscreen
+  const StatsPanel = () => {
+    if (isFullscreen) {
+      // Versione compatta per fullscreen
+      return (
+        <div className="absolute top-4 right-4 z-30 bg-black/70 backdrop-blur-sm rounded-lg p-3 text-white">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div className="text-2xl font-bold">{repsCount}</div>
+              <div className="text-xs opacity-70">Reps</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{currentWeight}kg</div>
+              <div className="text-xs opacity-70">Peso</div>
+            </div>
+            <div>
+              <div className={`text-2xl font-bold ${
+                postureScore >= 80 ? 'text-green-400' : 
+                postureScore >= 50 ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {postureScore}%
+              </div>
+              <div className="text-xs opacity-70">Forma</div>
+            </div>
+          </div>
         </div>
-        <div className="bg-green-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-green-600">{currentSetCount}</div>
-          <div className="text-xs text-gray-600">Set Corrente</div>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-purple-600">{sessionVolume} kg</div>
-          <div className="text-xs text-gray-600">Volume Totale</div>
-        </div>
-        <div className={`rounded-lg p-3 ${
-          postureScore >= 80 ? 'bg-green-50' : 
-          postureScore >= 50 ? 'bg-yellow-50' : 'bg-red-50'
-        }`}>
-          <div className={`text-2xl font-bold ${
-            postureScore >= 80 ? 'text-green-600' : 
-            postureScore >= 50 ? 'text-yellow-600' : 'text-red-600'
+      )
+    }
+    
+    // Versione normale
+    return (
+      <div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <div className="bg-blue-50 rounded-lg p-3">
+            <div className="text-2xl font-bold text-blue-600">{repsCount}</div>
+            <div className="text-xs text-gray-600">Ripetizioni</div>
+          </div>
+          <div className="bg-green-50 rounded-lg p-3">
+            <div className="text-2xl font-bold text-green-600">{currentSetCount}</div>
+            <div className="text-xs text-gray-600">Set Corrente</div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-3">
+            <div className="text-2xl font-bold text-purple-600">{sessionVolume} kg</div>
+            <div className="text-xs text-gray-600">Volume Totale</div>
+          </div>
+          <div className={`rounded-lg p-3 ${
+            postureScore >= 80 ? 'bg-green-50' : 
+            postureScore >= 50 ? 'bg-yellow-50' : 'bg-red-50'
           }`}>
-            {postureScore}%
-          </div>
-          <div className="text-xs text-gray-600">Postura</div>
-        </div>
-        <div className="bg-orange-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-orange-600">{alertHistory.length}</div>
-          <div className="text-xs text-gray-600">Alert Totali</div>
-        </div>
-      </div>
-      
-      {/* Quality Breakdown Bar */}
-      {repsCount > 0 && (
-        <div className="bg-white rounded-lg p-3 mb-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Qualità Ripetizioni</span>
-            <span className="text-xs text-gray-500">
-              Media: {Math.round((perfectReps * 100 + goodReps * 75 + fairReps * 50 + poorReps * 25) / repsCount)}%
-            </span>
-          </div>
-          <div className="flex h-8 rounded-lg overflow-hidden bg-gray-100">
-            {perfectReps > 0 && (
-              <div 
-                className="bg-green-500 flex items-center justify-center text-white text-xs font-bold"
-                style={{ width: `${(perfectReps / repsCount) * 100}%` }}
-              >
-                {perfectReps}
-              </div>
-            )}
-            {goodReps > 0 && (
-              <div 
-                className="bg-blue-500 flex items-center justify-center text-white text-xs font-bold"
-                style={{ width: `${(goodReps / repsCount) * 100}%` }}
-              >
-                {goodReps}
-              </div>
-            )}
-            {fairReps > 0 && (
-              <div 
-                className="bg-yellow-500 flex items-center justify-center text-white text-xs font-bold"
-                style={{ width: `${(fairReps / repsCount) * 100}%` }}
-              >
-                {fairReps}
-              </div>
-            )}
-            {poorReps > 0 && (
-              <div 
-                className="bg-red-500 flex items-center justify-center text-white text-xs font-bold"
-                style={{ width: `${(poorReps / repsCount) * 100}%` }}
-              >
-                {poorReps}
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between mt-2 text-xs">
-            <span className="text-green-600">Perfect: {perfectReps}</span>
-            <span className="text-blue-600">Good: {goodReps}</span>
-            <span className="text-yellow-600">Fair: {fairReps}</span>
-            <span className="text-red-600">Poor: {poorReps}</span>
-          </div>
-        </div>
-      )}
-      
-      {/* Movement Phase Indicator */}
-      {isRunning && !isPaused && (
-        <div className="bg-gray-50 rounded-lg p-3 mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Fase Movimento</span>
-            <span className={`text-sm font-bold ${
-              movementPhase === 'descending' ? 'text-blue-600' :
-              movementPhase === 'bottom' ? 'text-purple-600' :
-              movementPhase === 'ascending' ? 'text-orange-600' :
-              movementPhase === 'top' ? 'text-green-600' :
-              'text-gray-600'
+            <div className={`text-2xl font-bold ${
+              postureScore >= 80 ? 'text-green-600' : 
+              postureScore >= 50 ? 'text-yellow-600' : 'text-red-600'
             }`}>
-              {movementPhase === 'descending' ? '↓ Discesa' :
-               movementPhase === 'bottom' ? '⏸ Bottom' :
-               movementPhase === 'ascending' ? '↑ Risalita' :
-               movementPhase === 'top' ? '✓ Top' :
-               '⏳ Ready'}
-            </span>
+              {postureScore}%
+            </div>
+            <div className="text-xs text-gray-600">Postura</div>
           </div>
-          {/* Position bar */}
-          <div className="relative h-4 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="absolute h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-100"
-              style={{ width: `${currentPosition}%` }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xs font-bold text-white drop-shadow">
-                {Math.round(currentPosition)}%
+          <div className="bg-orange-50 rounded-lg p-3">
+            <div className="text-2xl font-bold text-orange-600">{alertHistory.length}</div>
+            <div className="text-xs text-gray-600">Alert Totali</div>
+          </div>
+        </div>
+        
+        {/* Quality Breakdown Bar */}
+        {repsCount > 0 && (
+          <div className="bg-white rounded-lg p-3 mb-4 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Qualità Ripetizioni</span>
+              <span className="text-xs text-gray-500">
+                Media: {Math.round((perfectReps * 100 + goodReps * 75 + fairReps * 50 + poorReps * 25) / repsCount)}%
               </span>
             </div>
-          </div>
-          {repDuration > 0 && (
-            <div className="mt-2 text-xs text-gray-600">
-              Ultima rep: {(repDuration / 1000).toFixed(1)}s - {repQuality}
+            <div className="flex h-8 rounded-lg overflow-hidden bg-gray-100">
+              {perfectReps > 0 && (
+                <div 
+                  className="bg-green-500 flex items-center justify-center text-white text-xs font-bold"
+                  style={{ width: `${(perfectReps / repsCount) * 100}%` }}
+                >
+                  {perfectReps}
+                </div>
+              )}
+              {goodReps > 0 && (
+                <div 
+                  className="bg-blue-500 flex items-center justify-center text-white text-xs font-bold"
+                  style={{ width: `${(goodReps / repsCount) * 100}%` }}
+                >
+                  {goodReps}
+                </div>
+              )}
+              {fairReps > 0 && (
+                <div 
+                  className="bg-yellow-500 flex items-center justify-center text-white text-xs font-bold"
+                  style={{ width: `${(fairReps / repsCount) * 100}%` }}
+                >
+                  {fairReps}
+                </div>
+              )}
+              {poorReps > 0 && (
+                <div 
+                  className="bg-red-500 flex items-center justify-center text-white text-xs font-bold"
+                  style={{ width: `${(poorReps / repsCount) * 100}%` }}
+                >
+                  {poorReps}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-  
-  // Alert Banner Component
-  const AlertBanner = () => {
-    if (!currentAlert || !injuryAlertsEnabled) return null
-    
-    const bgColor = currentAlert.level === 'danger' 
-      ? 'bg-red-600' 
-      : currentAlert.level === 'warning' 
-      ? 'bg-yellow-500' 
-      : 'bg-green-500'
-    
-    const icon = currentAlert.level === 'danger'
-      ? <XCircleIcon className="w-6 h-6" />
-      : currentAlert.level === 'warning'
-      ? <ExclamationTriangleIcon className="w-6 h-6" />
-      : <CheckCircleIcon className="w-6 h-6" />
-    
-    return (
-      <div className={`${bgColor} text-white p-4 rounded-lg mb-4 shadow-lg animate-pulse`}>
-        <div className="flex items-center gap-3">
-          {icon}
-          <div className="flex-1">
-            <div className="font-bold text-lg">
-              {currentAlert.level === 'danger' ? 'PERICOLO!' : 
-               currentAlert.level === 'warning' ? 'ATTENZIONE' : 'OK'}
-            </div>
-            <div className="text-sm opacity-90">
-              {currentAlert.message}
-            </div>
-            {currentAlert.autopaused && (
-              <div className="text-xs mt-1 font-bold">
-                ⛔ ESERCIZIO FERMATO PER SICUREZZA
-              </div>
-            )}
-          </div>
-        </div>
-        {currentPostureIssues.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-white/30">
-            <div className="text-sm font-medium mb-1">Raccomandazioni:</div>
-            {currentPostureIssues.map((issue, idx) => (
-              <div key={idx} className="text-xs opacity-90 mb-1">
-                • {issue.recommendation}
-              </div>
-            ))}
           </div>
         )}
+      </div>
+    )
+  }
+  
+  // Report Serie Modal
+  const SetReportModal = () => {
+    if (!showSetReport || !currentSetReport) return null
+    
+    const stars = Math.ceil(currentSetReport.overallScore / 20)
+    
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-6 rounded-t-2xl text-white">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold">Serie Completata! 🎯</h2>
+              <TrophyIcon className="w-8 h-8" />
+            </div>
+            <div className="flex items-center gap-1">
+              {[...Array(5)].map((_, i) => (
+                <StarIconSolid 
+                  key={i} 
+                  className={`w-6 h-6 ${i < stars ? 'text-yellow-300' : 'text-white/30'}`} 
+                />
+              ))}
+              <span className="ml-2 text-lg font-semibold">{currentSetReport.overallScore}%</span>
+            </div>
+          </div>
+          
+          {/* Stats Grid */}
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-600">Ripetizioni</div>
+                <div className="text-2xl font-bold">{currentSetReport.totalReps}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-600">Volume</div>
+                <div className="text-2xl font-bold">{currentSetReport.totalVolume}kg</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-600">TUT</div>
+                <div className="text-2xl font-bold">{currentSetReport.timeUnderTension.toFixed(1)}s</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-600">Tempo/Rep</div>
+                <div className="text-2xl font-bold">{currentSetReport.averageRepTime.toFixed(1)}s</div>
+              </div>
+            </div>
+            
+            {/* Quality Breakdown */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Qualità Ripetizioni</h3>
+              <div className="space-y-2">
+                {currentSetReport.perfectReps > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-green-500 rounded-full" />
+                      <span className="text-sm">Perfette</span>
+                    </div>
+                    <span className="font-bold text-green-600">{currentSetReport.perfectReps}</span>
+                  </div>
+                )}
+                {currentSetReport.goodReps > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full" />
+                      <span className="text-sm">Buone</span>
+                    </div>
+                    <span className="font-bold text-blue-600">{currentSetReport.goodReps}</span>
+                  </div>
+                )}
+                {currentSetReport.fairReps > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+                      <span className="text-sm">Discrete</span>
+                    </div>
+                    <span className="font-bold text-yellow-600">{currentSetReport.fairReps}</span>
+                  </div>
+                )}
+                {currentSetReport.poorReps > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full" />
+                      <span className="text-sm">Da Migliorare</span>
+                    </div>
+                    <span className="font-bold text-red-600">{currentSetReport.poorReps}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Metriche Extra */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
+                <span className="text-sm text-gray-600">ROM Medio</span>
+                <span className="font-bold text-blue-600">{currentSetReport.averageROM}%</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-purple-50 rounded-lg">
+                <span className="text-sm text-gray-600">Simmetria</span>
+                <span className="font-bold text-purple-600">{currentSetReport.averageSymmetry}%</span>
+              </div>
+            </div>
+            
+            {/* Issues */}
+            {currentSetReport.issues.length > 0 && (
+              <div className="mb-6 p-3 bg-yellow-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600" />
+                  <h3 className="font-semibold text-yellow-900">Correzioni</h3>
+                </div>
+                <ul className="text-sm text-yellow-800 space-y-1">
+                  {currentSetReport.issues.slice(0, 3).map((issue, idx) => (
+                    <li key={idx}>• Rep {issue.rep}: {issue.issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {/* AI Suggestion */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+              <div className="flex items-start gap-3">
+                <LightBulbIcon className="w-5 h-5 text-blue-600 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-1">Suggerimento AI</h3>
+                  <p className="text-sm text-gray-700">{currentSetReport.suggestion}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleSaveAndContinue}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-600 transition-all"
+              >
+                Salva e Continua
+              </button>
+              <button
+                onClick={handleRedoSet}
+                className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all"
+              >
+                Rifai Serie
+              </button>
+              <button
+                onClick={() => {/* TODO: Implement share */}}
+                className="p-3 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
+              >
+                <ShareIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -687,59 +949,65 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
   }
   
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      {/* Header Controls */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-bold text-gray-900">
-          {getExerciseName()} Detector
-        </h2>
+    <div ref={containerRef} className={`w-full ${isFullscreen ? 'h-screen bg-black' : 'max-w-4xl mx-auto'}`}>
+      {!isFullscreen && (
+        <>
+          {/* Header Controls */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-bold text-gray-900">
+              {getExerciseName()} Detector
+            </h2>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleInjuryAlerts}
+                className={`p-2 rounded-lg ${injuryAlertsEnabled ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}
+                title="Toggle Injury Alerts"
+              >
+                {injuryAlertsEnabled ? <ShieldExclamationIcon className="w-5 h-5" /> : <ShieldCheckIcon className="w-5 h-5" />}
+              </button>
+              
+              <button
+                onClick={toggleAudio}
+                className={`p-2 rounded-lg ${audioEnabled ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
+                title="Toggle Audio"
+              >
+                {audioEnabled ? <SpeakerWaveIcon className="w-5 h-5" /> : <SpeakerXMarkIcon className="w-5 h-5" />}
+              </button>
+              
+              <button
+                onClick={toggleSkeleton}
+                className={`p-2 rounded-lg ${showSkeleton ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
+                title="Toggle Skeleton"
+              >
+                {showSkeleton ? <EyeIcon className="w-5 h-5" /> : <EyeSlashIcon className="w-5 h-5" />}
+              </button>
+              
+              <button
+                onClick={toggleMetrics}
+                className={`p-2 rounded-lg ${showMetrics ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
+                title="Toggle Metrics"
+              >
+                <ChartBarIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          {/* Weight Selector */}
+          {!isRunning && <WeightSelector />}
+        </>
+      )}
+      
+      {/* Stats Panel - Solo se non fullscreen o se metrics abilitato */}
+      {showMetrics && isRunning && !isFullscreen && <StatsPanel />}
+      
+      {/* Video Container */}
+      <div className={`relative bg-black rounded-lg overflow-hidden ${
+        isFullscreen ? 'h-full' : 'mb-4'
+      }`}>
+        {/* Stats overlay in fullscreen */}
+        {isFullscreen && showMetrics && <StatsPanel />}
         
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleInjuryAlerts}
-            className={`p-2 rounded-lg ${injuryAlertsEnabled ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}
-            title="Toggle Injury Alerts"
-          >
-            {injuryAlertsEnabled ? <ShieldExclamationIcon className="w-5 h-5" /> : <ShieldCheckIcon className="w-5 h-5" />}
-          </button>
-          
-          <button
-            onClick={toggleAudio}
-            className={`p-2 rounded-lg ${audioEnabled ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
-            title="Toggle Audio"
-          >
-            {audioEnabled ? <SpeakerWaveIcon className="w-5 h-5" /> : <SpeakerXMarkIcon className="w-5 h-5" />}
-          </button>
-          
-          <button
-            onClick={toggleSkeleton}
-            className={`p-2 rounded-lg ${showSkeleton ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
-            title="Toggle Skeleton"
-          >
-            {showSkeleton ? <EyeIcon className="w-5 h-5" /> : <EyeSlashIcon className="w-5 h-5" />}
-          </button>
-          
-          <button
-            onClick={toggleMetrics}
-            className={`p-2 rounded-lg ${showMetrics ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
-            title="Toggle Metrics"
-          >
-            <ChartBarIcon className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-      
-      {/* Weight Selector */}
-      {!isRunning && <WeightSelector />}
-      
-      {/* Alert Banner - Sempre visibile quando c'è un alert */}
-      <AlertBanner />
-      
-      {/* Stats Panel */}
-      {showMetrics && isRunning && <StatsPanel />}
-      
-      {/* Video Container con Tracking Reale */}
-      <div className="relative bg-black rounded-lg overflow-hidden mb-4">
         {/* Status Badges */}
         <div className="absolute top-4 left-4 z-20 space-y-2">
           {isRunning && (
@@ -773,6 +1041,20 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           )}
         </div>
         
+        {/* Fullscreen button */}
+        {isRunning && (
+          <button
+            onClick={toggleFullscreen}
+            className="absolute top-4 right-4 z-30 p-2 bg-black/50 backdrop-blur-sm text-white rounded-lg hover:bg-black/70 transition-all"
+          >
+            {isFullscreen ? (
+              <ArrowsPointingInIcon className="w-6 h-6" />
+            ) : (
+              <ArrowsPointingOutIcon className="w-6 h-6" />
+            )}
+          </button>
+        )}
+        
         {/* Loading Indicator */}
         {poseLoading && (
           <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30">
@@ -784,19 +1066,7 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           </div>
         )}
         
-        {/* Posture Issues Overlay - Solo quando ci sono problemi */}
-        {isRunning && currentPostureIssues.length > 0 && showSkeleton && (
-          <div className="absolute top-4 right-4 z-20 bg-black/70 text-white p-3 rounded-lg max-w-xs">
-            <div className="text-xs font-bold mb-2">Problemi Rilevati:</div>
-            {currentPostureIssues.map((issue, idx) => (
-              <div key={idx} className="text-xs mb-1">
-                ⚠️ {issue.bodyPart}: {issue.message}
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {/* Video nascosto (solo per capture) */}
+        {/* Video nascosto */}
         <video
           ref={videoRef}
           autoPlay
@@ -807,10 +1077,10 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
           height={480}
         />
         
-        {/* Canvas con tracking visibile */}
+        {/* Canvas con tracking */}
         <canvas
           ref={canvasRef}
-          className="w-full h-auto"
+          className={`${isFullscreen ? 'w-full h-full object-contain' : 'w-full h-auto'}`}
           width={640}
           height={480}
         />
@@ -825,67 +1095,136 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
             </div>
           </div>
         )}
-      </div>
-      
-      {/* Control Buttons */}
-      <div className="flex gap-3 justify-center">
-        <button
-          onClick={handleStartStop}
-          className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-            isRunning
-              ? 'bg-red-500 hover:bg-red-600 text-white'
-              : 'bg-green-500 hover:bg-green-600 text-white'
-          }`}
-        >
-          {isRunning ? (
-            <>
-              <PauseIcon className="w-5 h-5" />
-              Stop Allenamento
-            </>
-          ) : (
-            <>
-              <PlayIcon className="w-5 h-5" />
-              Inizia Allenamento
-            </>
-          )}
-        </button>
         
-        {isRunning && (
-          <>
-            <button
-              onClick={handlePauseResume}
-              className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                isPaused
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
-              }`}
-            >
-              {isPaused ? (
-                <>
-                  <PlayIcon className="w-5 h-5" />
-                  Riprendi
-                </>
-              ) : (
-                <>
-                  <PauseIcon className="w-5 h-5" />
-                  Pausa
-                </>
-              )}
-            </button>
+        {/* Control Buttons in Fullscreen */}
+        {isFullscreen && (
+          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-30 flex gap-3">
+            {isRunning && currentSetCount > 0 && (
+              <button
+                onClick={handleEndSet}
+                className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <CheckCircleIcon className="w-5 h-5" />
+                Fine Serie
+              </button>
+            )}
+            
+            {isRunning && (
+              <button
+                onClick={handlePauseResume}
+                className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                  isPaused
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                }`}
+              >
+                {isPaused ? (
+                  <>
+                    <PlayIcon className="w-5 h-5" />
+                    Riprendi
+                  </>
+                ) : (
+                  <>
+                    <PauseIcon className="w-5 h-5" />
+                    Pausa
+                  </>
+                )}
+              </button>
+            )}
             
             <button
-              onClick={handleReset}
-              className="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+              onClick={handleStartStop}
+              className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
             >
-              <ArrowPathIcon className="w-5 h-5" />
-              Reset
+              <XCircleIcon className="w-5 h-5" />
+              Stop
             </button>
-          </>
+          </div>
         )}
       </div>
       
-      {/* Session Summary con Alert Stats */}
-      {!isRunning && totalRepsSession.current > 0 && (
+      {/* Control Buttons (non fullscreen) */}
+      {!isFullscreen && (
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={handleStartStop}
+            className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+              isRunning
+                ? 'bg-red-500 hover:bg-red-600 text-white'
+                : 'bg-green-500 hover:bg-green-600 text-white'
+            }`}
+          >
+            {isRunning ? (
+              <>
+                <PauseIcon className="w-5 h-5" />
+                Stop Allenamento
+              </>
+            ) : (
+              <>
+                <PlayIcon className="w-5 h-5" />
+                Inizia Allenamento
+              </>
+            )}
+          </button>
+          
+          {isRunning && (
+            <>
+              <button
+                onClick={toggleFullscreen}
+                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <ArrowsPointingOutIcon className="w-5 h-5" />
+                Fullscreen
+              </button>
+              
+              {currentSetCount > 0 && (
+                <button
+                  onClick={handleEndSet}
+                  className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                >
+                  <CheckCircleIcon className="w-5 h-5" />
+                  Fine Serie
+                </button>
+              )}
+              
+              <button
+                onClick={handlePauseResume}
+                className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                  isPaused
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                }`}
+              >
+                {isPaused ? (
+                  <>
+                    <PlayIcon className="w-5 h-5" />
+                    Riprendi
+                  </>
+                ) : (
+                  <>
+                    <PauseIcon className="w-5 h-5" />
+                    Pausa
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={handleReset}
+                className="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <ArrowPathIcon className="w-5 h-5" />
+                Reset
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      
+      {/* Set Report Modal */}
+      <SetReportModal />
+      
+      {/* Session Summary (solo non fullscreen) */}
+      {!isFullscreen && !isRunning && totalRepsSession.current > 0 && (
         <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
           <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
             <CheckCircleIcon className="w-5 h-5" />
@@ -900,110 +1239,6 @@ export default function ExerciseDetectorUniversal({ exerciseType }: Props) {
               <span className="text-gray-600">Volume:</span>
               <span className="ml-2 font-bold">{sessionVolume} kg</span>
             </div>
-            <div>
-              <span className="text-gray-600">Reps Perfette:</span>
-              <span className="ml-2 font-bold text-green-600">{perfectReps}</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Reps Buone:</span>
-              <span className="ml-2 font-bold text-blue-600">{goodReps}</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Reps Discrete:</span>
-              <span className="ml-2 font-bold text-yellow-600">{fairReps}</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Da Migliorare:</span>
-              <span className="ml-2 font-bold text-red-600">{poorReps}</span>
-            </div>
-            {alertHistory.length > 0 && (
-              <>
-                <div>
-                  <span className="text-gray-600">Alert Ricevuti:</span>
-                  <span className="ml-2 font-bold text-orange-600">{alertHistory.length}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Alert Gravi:</span>
-                  <span className="ml-2 font-bold text-red-600">
-                    {alertHistory.filter(a => a.level === 'danger').length}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-          
-          {/* Riepilogo Alert della sessione */}
-          {alertHistory.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-green-200">
-              <div className="text-sm font-medium text-gray-700 mb-2">
-                Riepilogo Alert Infortuni:
-              </div>
-              <div className="space-y-1">
-                {Array.from(new Set(alertHistory.map(a => a.bodyPart))).map(bodyPart => {
-                  const count = alertHistory.filter(a => a.bodyPart === bodyPart).length
-                  const severity = alertHistory.filter(a => a.bodyPart === bodyPart && a.level === 'danger').length
-                  
-                  return (
-                    <div key={bodyPart} className="flex justify-between text-xs">
-                      <span className="capitalize">{bodyPart}:</span>
-                      <span className={severity > 0 ? 'text-red-600 font-bold' : 'text-orange-600'}>
-                        {count} alert {severity > 0 && `(${severity} gravi)`}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Recent Sessions */}
-      {sessions.length > 0 && !isRunning && (
-        <div className="mt-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Sessioni Recenti</h3>
-          <div className="space-y-2">
-            {sessions.slice(0, 3).map((session, idx) => (
-              <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="text-sm font-medium">
-                    {new Date(session.date).toLocaleDateString('it-IT')}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {session.totalReps} reps
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-gray-900">
-                    {session.totalVolume} kg
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Qualità: {Math.round((session.perfectReps / session.totalReps) * 100)}%
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {/* Debug info - solo in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
-          <div>Session Active: {isActive ? 'Yes' : 'No'}</div>
-          <div>Session Started: {sessionStarted.current ? 'Yes' : 'No'}</div>
-          <div>Total Reps: {totalRepsSession.current}</div>
-          <div>Session Volume: {sessionVolume}</div>
-          <div>Posture Score: {postureScore}</div>
-          <div>Alert Count: {alertHistory.length}</div>
-          <div>Danger Frames: {consecutiveDangerFrames}</div>
-          <div>Auto-Paused: {wasAutoPaused ? 'Yes' : 'No'}</div>
-          <div className="mt-2 pt-2 border-t">
-            <div className="font-bold">PoseNet Status:</div>
-            <div>Model Ready: {modelReady ? 'Yes' : 'No'}</div>
-            <div>Tracking: {poseTracking ? 'Yes' : 'No'}</div>
-            <div>Phase: {posePhase?.phase || 'N/A'}</div>
-            <div>Angles: {currentAngles ? 'Detecting' : 'Not detecting'}</div>
           </div>
         </div>
       )}
