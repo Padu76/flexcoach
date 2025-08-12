@@ -1,8 +1,8 @@
-// components/OnboardingFlow.tsx - Sistema completo onboarding e calibrazione
+// components/OnboardingFlow.tsx - Sistema completo onboarding e calibrazione - FIX MOBILE
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { 
   UserCircleIcon,
   ChartBarIcon,
@@ -54,7 +54,6 @@ interface Props {
 }
 
 export default function OnboardingFlow({ onComplete, onSkip }: Props) {
-  // Rimosso useDataManager - i dati verranno salvati dal componente padre
   const [currentStep, setCurrentStep] = useState(1)
   const [isAnimating, setIsAnimating] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -80,16 +79,15 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
   
   const totalSteps = 5
   
-  // Calcola BMI
-  const calculateBMI = () => {
+  // Calcola BMI - memoizzato per evitare ricalcoli
+  const calculateBMI = useMemo(() => {
     const heightInM = data.height / 100
     return (data.weight / (heightInM * heightInM)).toFixed(1)
-  }
+  }, [data.height, data.weight])
   
   // Calcola 1RM stimato basato su esperienza e peso corporeo
-  const estimateMax = (exercise: 'squat' | 'bench' | 'deadlift') => {
+  const estimateMax = useCallback((exercise: 'squat' | 'bench' | 'deadlift') => {
     const bodyweight = data.weight
-    let multiplier = 1
     
     // Moltiplicatori basati su esperienza e esercizio
     const multipliers = {
@@ -101,10 +99,10 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     // Aggiustamento per genere
     const genderMultiplier = data.gender === 'female' ? 0.7 : 1.0
     
-    multiplier = multipliers[data.experienceLevel][exercise] * genderMultiplier
+    const multiplier = multipliers[data.experienceLevel][exercise] * genderMultiplier
     
     return Math.round(bodyweight * multiplier)
-  }
+  }, [data.weight, data.experienceLevel, data.gender])
   
   // Auto-stima massimali se non testati
   useEffect(() => {
@@ -116,10 +114,10 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         deadliftMax: estimateMax('deadlift')
       }))
     }
-  }, [data.weight, data.experienceLevel, data.gender, data.testedMaxes])
+  }, [data.weight, data.experienceLevel, data.gender, data.testedMaxes, estimateMax])
   
   // Validazione per ogni step
-  const validateStep = (step: number): boolean => {
+  const validateStep = useCallback((step: number): boolean => {
     const newErrors: Record<string, string> = {}
     
     switch (step) {
@@ -154,10 +152,10 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
-  }
+  }, [data])
   
-  // Gestione navigazione
-  const handleNext = () => {
+  // Gestione navigazione - con useCallback per evitare re-render
+  const handleNext = useCallback(() => {
     if (!validateStep(currentStep)) return
     
     setIsAnimating(true)
@@ -165,23 +163,49 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
       setCurrentStep(prev => Math.min(prev + 1, totalSteps))
       setIsAnimating(false)
     }, 300)
-  }
+  }, [currentStep, validateStep])
   
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setIsAnimating(true)
     setTimeout(() => {
       setCurrentStep(prev => Math.max(prev - 1, 1))
       setIsAnimating(false)
     }, 300)
-  }
+  }, [])
   
   // Salva dati e completa onboarding
-  const handleComplete = () => {
+  const handleComplete = useCallback(() => {
     if (!validateStep(currentStep)) return
     
     // Passa i dati al componente padre che li salverà
     onComplete(data)
-  }
+  }, [currentStep, data, onComplete, validateStep])
+  
+  // Handler per input con useCallback per evitare re-render
+  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setData(prev => ({ ...prev, name: value }))
+  }, [])
+  
+  const handleAgeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value) || 0
+    setData(prev => ({ ...prev, age: value }))
+  }, [])
+  
+  const handleWeightChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value) || 0
+    setData(prev => ({ ...prev, weight: value }))
+  }, [])
+  
+  const handleHeightChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value) || 0
+    setData(prev => ({ ...prev, height: value }))
+  }, [])
+  
+  const handleGenderChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value as 'male' | 'female' | 'other'
+    setData(prev => ({ ...prev, gender: value }))
+  }, [])
   
   // Progress bar component
   const ProgressBar = () => (
@@ -203,7 +227,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     </div>
   )
   
-  // Step 1: Dati Personali
+  // Step 1: Dati Personali - OTTIMIZZATO PER MOBILE
   const Step1PersonalData = () => (
     <div className={`space-y-6 ${isAnimating ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
       <div className="text-center mb-6">
@@ -219,11 +243,15 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         <input
           type="text"
           value={data.name}
-          onChange={(e) => setData({...data, name: e.target.value})}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+          onChange={handleNameChange}
+          className={`w-full px-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-blue-500 ${
             errors.name ? 'border-red-500' : 'border-gray-300'
           }`}
           placeholder="Il tuo nome"
+          autoComplete="name"
+          autoCapitalize="words"
+          autoCorrect="off"
+          enterKeyHint="next"
         />
         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
       </div>
@@ -235,11 +263,16 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </label>
           <input
             type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={data.age}
-            onChange={(e) => setData({...data, age: parseInt(e.target.value)})}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            onChange={handleAgeChange}
+            className={`w-full px-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-blue-500 ${
               errors.age ? 'border-red-500' : 'border-gray-300'
             }`}
+            min="14"
+            max="100"
+            enterKeyHint="next"
           />
           {errors.age && <p className="text-red-500 text-xs mt-1">{errors.age}</p>}
         </div>
@@ -250,8 +283,8 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </label>
           <select
             value={data.gender}
-            onChange={(e) => setData({...data, gender: e.target.value as any})}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            onChange={handleGenderChange}
+            className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
             <option value="male">Maschile</option>
             <option value="female">Femminile</option>
@@ -267,12 +300,16 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </label>
           <input
             type="number"
+            inputMode="decimal"
             value={data.weight}
-            onChange={(e) => setData({...data, weight: parseFloat(e.target.value)})}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            onChange={handleWeightChange}
+            className={`w-full px-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-blue-500 ${
               errors.weight ? 'border-red-500' : 'border-gray-300'
             }`}
             step="0.5"
+            min="30"
+            max="300"
+            enterKeyHint="next"
           />
           {errors.weight && <p className="text-red-500 text-xs mt-1">{errors.weight}</p>}
         </div>
@@ -283,11 +320,16 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </label>
           <input
             type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={data.height}
-            onChange={(e) => setData({...data, height: parseInt(e.target.value)})}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            onChange={handleHeightChange}
+            className={`w-full px-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-blue-500 ${
               errors.height ? 'border-red-500' : 'border-gray-300'
             }`}
+            min="120"
+            max="250"
+            enterKeyHint="done"
           />
           {errors.height && <p className="text-red-500 text-xs mt-1">{errors.height}</p>}
         </div>
@@ -297,14 +339,14 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         <div className="bg-blue-50 p-3 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">Il tuo BMI:</span>
-            <span className="font-bold text-blue-600">{calculateBMI()}</span>
+            <span className="font-bold text-blue-600">{calculateBMI}</span>
           </div>
         </div>
       )}
     </div>
   )
   
-  // Step 2: Esperienza
+  // Step 2: Esperienza - OTTIMIZZATO PER MOBILE
   const Step2Experience = () => (
     <div className={`space-y-6 ${isAnimating ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
       <div className="text-center mb-6">
@@ -326,7 +368,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
             <button
               key={level.value}
               onClick={() => setData({...data, experienceLevel: level.value as any})}
-              className={`w-full p-4 rounded-lg border-2 transition-all ${
+              className={`w-full p-4 rounded-lg border-2 transition-all min-h-[80px] ${
                 data.experienceLevel === level.value
                   ? 'border-purple-500 bg-purple-50'
                   : 'border-gray-200 hover:border-gray-300'
@@ -347,13 +389,16 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         </label>
         <input
           type="number"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={data.trainingYears}
-          onChange={(e) => setData({...data, trainingYears: parseInt(e.target.value)})}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 ${
+          onChange={(e) => setData({...data, trainingYears: parseInt(e.target.value) || 0})}
+          className={`w-full px-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-purple-500 ${
             errors.trainingYears ? 'border-red-500' : 'border-gray-300'
           }`}
           min="0"
           max="50"
+          enterKeyHint="done"
         />
         {errors.trainingYears && <p className="text-red-500 text-xs mt-1">{errors.trainingYears}</p>}
       </div>
@@ -365,7 +410,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         <div className="flex gap-4">
           <button
             onClick={() => setData({...data, currentlyTraining: true})}
-            className={`flex-1 py-2 px-4 rounded-lg border-2 ${
+            className={`flex-1 py-3 px-4 rounded-lg border-2 min-h-[50px] ${
               data.currentlyTraining
                 ? 'border-green-500 bg-green-50 text-green-700'
                 : 'border-gray-200'
@@ -375,7 +420,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </button>
           <button
             onClick={() => setData({...data, currentlyTraining: false})}
-            className={`flex-1 py-2 px-4 rounded-lg border-2 ${
+            className={`flex-1 py-3 px-4 rounded-lg border-2 min-h-[50px] ${
               !data.currentlyTraining
                 ? 'border-red-500 bg-red-50 text-red-700'
                 : 'border-gray-200'
@@ -392,7 +437,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         </label>
         <div className="space-y-2">
           {['Schiena', 'Ginocchia', 'Spalle', 'Polsi', 'Caviglie'].map(injury => (
-            <label key={injury} className="flex items-center">
+            <label key={injury} className="flex items-center min-h-[44px] px-2">
               <input
                 type="checkbox"
                 checked={data.injuries.includes(injury)}
@@ -403,9 +448,9 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
                     setData({...data, injuries: data.injuries.filter(i => i !== injury)})
                   }
                 }}
-                className="mr-2 rounded text-purple-500"
+                className="mr-3 w-5 h-5 rounded text-purple-500"
               />
-              <span className="text-sm">{injury}</span>
+              <span className="text-base">{injury}</span>
             </label>
           ))}
         </div>
@@ -424,7 +469,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     </div>
   )
   
-  // Step 3: Obiettivi
+  // Step 3: Obiettivi - OTTIMIZZATO PER MOBILE
   const Step3Goals = () => (
     <div className={`space-y-6 ${isAnimating ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
       <div className="text-center mb-6">
@@ -454,7 +499,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
                   setData({...data, goals: [...data.goals, goal.value as any]})
                 }
               }}
-              className={`w-full p-4 rounded-lg border-2 transition-all ${
+              className={`w-full p-4 rounded-lg border-2 transition-all min-h-[80px] ${
                 data.goals.includes(goal.value as any)
                   ? 'border-yellow-500 bg-yellow-50'
                   : 'border-gray-200 hover:border-gray-300'
@@ -480,12 +525,12 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Quanti giorni a settimana puoi allenarti?
         </label>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {[1, 2, 3, 4, 5, 6, 7].map(day => (
             <button
               key={day}
               onClick={() => setData({...data, weeklyTrainingDays: day})}
-              className={`flex-1 py-2 rounded-lg border-2 ${
+              className={`flex-1 min-w-[40px] py-3 rounded-lg border-2 ${
                 data.weeklyTrainingDays === day
                   ? 'border-yellow-500 bg-yellow-50 text-yellow-700 font-bold'
                   : 'border-gray-200 hover:border-gray-300'
@@ -510,7 +555,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
             <button
               key={time.value}
               onClick={() => setData({...data, preferredTime: time.value as any})}
-              className={`py-3 rounded-lg border-2 ${
+              className={`py-4 rounded-lg border-2 min-h-[80px] ${
                 data.preferredTime === time.value
                   ? 'border-yellow-500 bg-yellow-50'
                   : 'border-gray-200 hover:border-gray-300'
@@ -525,7 +570,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     </div>
   )
   
-  // Step 4: Calibrazione Forza
+  // Step 4: Calibrazione Forza - OTTIMIZZATO PER MOBILE
   const Step4Calibration = () => (
     <div className={`space-y-6 ${isAnimating ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
       <div className="text-center mb-6">
@@ -552,7 +597,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </label>
           <button
             onClick={() => setData({...data, testedMaxes: !data.testedMaxes})}
-            className={`px-4 py-1 rounded-full text-sm font-medium ${
+            className={`px-4 py-2 rounded-full text-sm font-medium ${
               data.testedMaxes
                 ? 'bg-green-100 text-green-700'
                 : 'bg-gray-100 text-gray-700'
@@ -578,19 +623,22 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           <div className="flex items-center gap-2">
             <input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={data.squatMax}
               onChange={(e) => setData({
                 ...data, 
-                squatMax: parseInt(e.target.value),
+                squatMax: parseInt(e.target.value) || 0,
                 testedMaxes: true
               })}
-              className={`flex-1 px-3 py-2 border rounded-lg font-bold text-lg ${
+              className={`flex-1 px-3 py-3 text-lg border rounded-lg font-bold ${
                 errors.squatMax ? 'border-red-500' : 'border-gray-300'
               }`}
               min="20"
               max="500"
+              enterKeyHint="next"
             />
-            <span className="text-gray-600">kg</span>
+            <span className="text-gray-600 text-lg">kg</span>
           </div>
           {errors.squatMax && <p className="text-red-500 text-xs mt-1">{errors.squatMax}</p>}
           <div className="mt-2 text-xs text-gray-500">
@@ -612,19 +660,22 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           <div className="flex items-center gap-2">
             <input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={data.benchMax}
               onChange={(e) => setData({
                 ...data, 
-                benchMax: parseInt(e.target.value),
+                benchMax: parseInt(e.target.value) || 0,
                 testedMaxes: true
               })}
-              className={`flex-1 px-3 py-2 border rounded-lg font-bold text-lg ${
+              className={`flex-1 px-3 py-3 text-lg border rounded-lg font-bold ${
                 errors.benchMax ? 'border-red-500' : 'border-gray-300'
               }`}
               min="20"
               max="400"
+              enterKeyHint="next"
             />
-            <span className="text-gray-600">kg</span>
+            <span className="text-gray-600 text-lg">kg</span>
           </div>
           {errors.benchMax && <p className="text-red-500 text-xs mt-1">{errors.benchMax}</p>}
           <div className="mt-2 text-xs text-gray-500">
@@ -646,19 +697,22 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           <div className="flex items-center gap-2">
             <input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={data.deadliftMax}
               onChange={(e) => setData({
                 ...data, 
-                deadliftMax: parseInt(e.target.value),
+                deadliftMax: parseInt(e.target.value) || 0,
                 testedMaxes: true
               })}
-              className={`flex-1 px-3 py-2 border rounded-lg font-bold text-lg ${
+              className={`flex-1 px-3 py-3 text-lg border rounded-lg font-bold ${
                 errors.deadliftMax ? 'border-red-500' : 'border-gray-300'
               }`}
               min="20"
               max="600"
+              enterKeyHint="done"
             />
-            <span className="text-gray-600">kg</span>
+            <span className="text-gray-600 text-lg">kg</span>
           </div>
           {errors.deadliftMax && <p className="text-red-500 text-xs mt-1">{errors.deadliftMax}</p>}
           <div className="mt-2 text-xs text-gray-500">
@@ -677,7 +731,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
     </div>
   )
   
-  // Step 5: Riepilogo
+  // Step 5: Riepilogo - OTTIMIZZATO PER MOBILE
   const Step5Summary = () => (
     <div className={`space-y-6 ${isAnimating ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
       <div className="text-center mb-6">
@@ -704,7 +758,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">BMI:</span>
-            <span className="font-medium">{calculateBMI()}</span>
+            <span className="font-medium">{calculateBMI}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Esperienza:</span>
@@ -791,17 +845,17 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
           <ProgressBar />
           
           {renderStep()}
           
-          {/* Navigation buttons */}
+          {/* Navigation buttons - PIÙ GRANDI PER MOBILE */}
           <div className="flex justify-between items-center mt-8">
             {currentStep > 1 ? (
               <button
                 onClick={handleBack}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-gray-900"
+                className="flex items-center gap-2 px-4 py-3 text-gray-700 hover:text-gray-900 min-h-[48px]"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Indietro
@@ -809,7 +863,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
             ) : (
               <button
                 onClick={onSkip}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 px-4 py-3 min-h-[48px]"
               >
                 Salta per ora
               </button>
@@ -818,7 +872,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
             {currentStep < totalSteps ? (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:shadow-lg transition-shadow"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:shadow-lg transition-shadow min-h-[48px]"
               >
                 Avanti
                 <ArrowRightIcon className="w-4 h-4" />
@@ -826,7 +880,7 @@ export default function OnboardingFlow({ onComplete, onSkip }: Props) {
             ) : (
               <button
                 onClick={handleComplete}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:shadow-lg transition-shadow"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:shadow-lg transition-shadow min-h-[48px]"
               >
                 <CheckCircleIcon className="w-5 h-5" />
                 Inizia FlexCoach
